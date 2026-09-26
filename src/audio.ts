@@ -1,10 +1,26 @@
-/** Synthesised Mustang Showroom sound effects and the V8 idle loop, entirely Web Audio, no asset files. */
+/**
+ * Synthesised Mustang Showroom sound effects and the V8, entirely Web Audio, no asset files.
+ * The engine plays pre-rendered loops from `engineSound.ts` at a few fixed speeds, crossfaded
+ * and pitch-shifted to follow an rpm model that the start (solenoid, crank, catch, flare), the
+ * throttle and the shutdown all drive.
+ */
 
 import type { SoundName } from './car/types.ts'
+import {
+  CATCH_FLARE_RPM,
+  CATCH_FLARE_SECONDS,
+  IDLE_RPM,
+  LOOP_RPMS,
+  REDLINE_RPM,
+  STARTER_CRANK_SECONDS,
+  generateEngineLoop,
+  generateSolenoidClunk,
+  generateStarterLoop,
+} from './engineSound.ts'
 
 export interface ShowroomAudio {
   play(name: SoundName, intensity?: number): void
-  /** Starts (starter crank then catch, then a looping big-block idle) or stops (a last rumble, then silence) the engine. */
+  /** Starts (solenoid, starter crank, catch and flare, then idle) or stops (rpm falls away with a couple of pops) the engine. */
   setEngine(running: boolean): void
   /** 0 idle .. 1 full throttle; the engine note rises and gets louder. Eases. */
   setThrottle(amount: number): void
@@ -81,55 +97,50 @@ const POP_THUMP_FREQ_SPREAD_HZ = 40
 const POP_THUMP_DURATION_S = 0.08
 const POP_THUMP_END_FREQ_HZ = 40
 
-// --- Starter cranking ------------------------------------------------------------------------
+// --- The V8 ----------------------------------------------------------------------------------
 
-const STARTER_CRANK_HZ = 22
-const STARTER_LOWPASS_HZ = 400
-const STARTER_MOD_HZ = 11
-const STARTER_DURATION_S = 1.1
-const STARTER_ATTACK_S = 0.08
-const STARTER_RELEASE_S = 0.12
-const STARTER_PEAK = 0.2
-/** Base level of the AM gain: with the ±1 square wave added on top this chops between 0 and 2×. */
-const STARTER_CHOP_BASE = 0.5
-/** How long after the crank starts the engine catches, and how it swells in. */
-const CATCH_FADE_IN_S = 0.3
-const CATCH_POP_BURST_S = 0.25
-const CATCH_POP_COUNT = 4
-const CATCH_POP_PEAK = 0.16
-
-// --- Engine shutdown -------------------------------------------------------------------------
-
-const STOP_FALL_S = 0.9
-/** The idle loop's firing frequency never truly reaches 0 Hz (oscillators reject it); this is "stalled". */
-const STOP_END_FREQ_HZ = 12
+/** The engine's level at idle and at redline, before the master gain. */
+const ENGINE_IDLE_LEVEL = 0.16
+const ENGINE_REDLINE_LEVEL = 0.34
+/** A gentle lowpass over the whole engine: the showroom's walls take the top off. */
+const ENGINE_LOWPASS_HZ = 3400
+const ENGINE_LOWPASS_Q = 0.6
+const ENGINE_COMPRESSOR_THRESHOLD_DB = -18
+const ENGINE_COMPRESSOR_RATIO = 4
+/** How quickly the rpm chases the throttle (seconds to close about 63% of the gap), rising and falling. */
+const RPM_RISE_TIME_CONSTANT_S = 0.3
+const RPM_FALL_TIME_CONSTANT_S = 0.65
+/** Throttle maps to rpm with this curve, so the first bit of pedal does little and the last a lot. */
+const THROTTLE_CURVE = 1.4
+/** The lumpy cam's idle lope: an rpm wobble that fades out above idle. */
+const LOPE_RPM = 30
+const LOPE_HZ = 3.3
+const LOPE_FADE_RPM = 1600
+/** The rpm follower's update rate and the automation smoothing applied to each of its steps. */
+const ENGINE_TICK_MS = 25
+const ENGINE_TICK_SMOOTHING_S = 0.045
+/** The catch: the crank speed the engine fires from, how fast the flare rises, and its pops. */
+const CATCH_START_RPM = 260
+const CATCH_RISE_S = 0.3
+const CATCH_FLARE_DECAY_S = 0.45
+const CATCH_SWELL_S = 0.14
+const CATCH_POP_COUNT = 3
+const CATCH_POP_PEAK = 0.15
+/** Shutdown: the rpm falls at this rate until the engine stalls, shuddering as it goes. */
+const STOP_RPM_FALL_PER_SECOND = 1250
+const STOP_STALL_RPM = 220
+const STOP_SHUDDER_RPM = 70
+const STOP_SHUDDER_HZ = 6
 const STOP_POP_COUNT = 2
 const STOP_POP_PEAK = 0.18
-
-// --- The V8 idle loop (~750 rpm at idle: 8 cylinders firing per 2 revolutions = 50 pulses/s) ---
-
-const IDLE_FIRING_HZ = 50
-const FULL_THROTTLE_FIRING_HZ = 230
-/** `setThrottle` and the starter's catch/shutdown ramps all ease toward their targets at this rate. */
-const ENGINE_TIME_CONSTANT_S = 0.25
-/** The big cam's lope: a slow LFO wobbling the firing pitch. */
-const ENGINE_LOPE_HZ = 4
-const ENGINE_LOPE_DEPTH = 0.02
-/** The tracking noise bed's lowpass follows this multiple of the firing frequency. */
-const ENGINE_NOISE_LOWPASS_MULT = 2
-const ENGINE_LOWPASS_HZ = 1200
-const ENGINE_LOWPASS_Q = 0.7
-const ENGINE_COMPRESSOR_THRESHOLD_DB = -20
-const ENGINE_COMPRESSOR_RATIO = 6
-/** Relative mix of the three idle layers, all measured before the shared bus gain. */
-const ENGINE_FIRING_MIX = 0.5
-const ENGINE_SUB_MIX = 0.35
-const ENGINE_NOISE_MIX = 0.22
-/** Waveshaper drive: how ragged the sawtooth's firing edge sounds. */
-const ENGINE_WAVESHAPER_DRIVE = 9
-/** The idle loop sits well under the one-shot effects; only full throttle approaches them. */
-const ENGINE_IDLE_BUS_GAIN = 0.08
-const ENGINE_FULL_BUS_GAIN = 0.2
+/** The starter: its level, how it labours up to speed, and the zing as it disengages at the catch. */
+const STARTER_LEVEL = 0.26
+const STARTER_ATTACK_S = 0.05
+const STARTER_SPIN_UP_S = 0.45
+const STARTER_START_RATE = 0.8
+const STARTER_RELEASE_S = 0.18
+const STARTER_DISENGAGE_RATE = 1.35
+const SOLENOID_LEVEL = 0.4
 
 type AudioContextConstructor = typeof AudioContext
 type ToneExtras = { type?: OscillatorType; endFreq?: number; attack?: number }
@@ -219,17 +230,6 @@ function playNoiseSweep(
   source.stop(now + duration + 0.02)
 }
 
-/** A soft clipper curve for the idle loop's waveshaper: higher `amount` sounds more ragged. */
-function createDistortionCurve(amount: number): Float32Array<ArrayBuffer> {
-  const samples = 256
-  const curve = new Float32Array(samples)
-  for (let i = 0; i < samples; i++) {
-    const x = (i / (samples - 1)) * 2 - 1
-    curve[i] = ((3 + amount) * x * ((20 * Math.PI) / 180)) / (Math.PI + amount * Math.abs(x))
-  }
-  return curve
-}
-
 /** One exhaust pop: a band-passed noise crack plus a low thump, reused by the catch and the shutdown. */
 function playExhaustPop(context: AudioContext, out: AudioNode, buffer: AudioBuffer, at: number, peak: number): void {
   const freq = POP_NOISE_MIN_FREQ_HZ + Math.random() * POP_NOISE_FREQ_SPREAD_HZ
@@ -310,29 +310,65 @@ function voiceLightsOff(context: AudioContext, out: GainNode, buffer: AudioBuffe
   )
 }
 
-/** The idle loop's live nodes, from the first `startEngineAudio` call until it fully stops. */
-interface EngineLoopNodes {
-  firingOsc: OscillatorNode
-  waveshaper: WaveShaperNode
-  firingGain: GainNode
-  subOsc: OscillatorNode
-  subGain: GainNode
-  noiseSource: AudioBufferSourceNode
-  noiseFilter: BiquadFilterNode
-  noiseGain: GainNode
-  lopeLfo: OscillatorNode
-  lopeDepth: GainNode
-  lopeSubDepth: GainNode
+/** The engine's live nodes, from the crank until the shutdown stalls. */
+interface EngineNodes {
+  /** One looping source per rendered speed; the follower crossfades and pitch-shifts them. */
+  loops: { rpm: number; source: AudioBufferSourceNode; gain: GainNode }[]
+  /** Level for the whole engine; ramped by the catch, the throttle and the shutdown. */
+  bus: GainNode
   lowpass: BiquadFilterNode
   compressor: DynamicsCompressorNode
-  /** Final gain for the whole idle loop; ramped by the catch, `setThrottle` and the shutdown. */
-  bus: GainNode
 }
 
-type EngineState = 'stopped' | 'starting' | 'running' | 'stopping'
+interface StarterNodes {
+  source: AudioBufferSourceNode
+  gain: GainNode
+}
 
-const firingHzForThrottle = (amount: number): number => IDLE_FIRING_HZ + (FULL_THROTTLE_FIRING_HZ - IDLE_FIRING_HZ) * clamp01(amount)
-const busGainForThrottle = (amount: number): number => ENGINE_IDLE_BUS_GAIN + (ENGINE_FULL_BUS_GAIN - ENGINE_IDLE_BUS_GAIN) * clamp01(amount)
+interface EngineBuffers {
+  loops: { rpm: number; buffer: AudioBuffer }[]
+  starter: AudioBuffer
+  solenoid: AudioBuffer
+}
+
+type EnginePhase = 'stopped' | 'cranking' | 'catching' | 'running' | 'stopping'
+
+const lerp = (a: number, b: number, t: number): number => a + (b - a) * t
+const easeOut = (t: number): number => 1 - (1 - clamp01(t)) ** 3
+
+/** Normalised engine speed, 0 at idle and 1 at redline. */
+const speedForRpm = (rpm: number): number => clamp01((rpm - IDLE_RPM) / (REDLINE_RPM - IDLE_RPM))
+const rpmForThrottle = (amount: number): number => IDLE_RPM + (REDLINE_RPM - IDLE_RPM) * clamp01(amount) ** THROTTLE_CURVE
+const levelForRpm = (rpm: number): number => lerp(ENGINE_IDLE_LEVEL, ENGINE_REDLINE_LEVEL, Math.sqrt(speedForRpm(rpm)))
+
+/**
+ * Equal-power crossfade weights over the rendered loops for `rpm`, interpolating in log-rpm so
+ * each loop is pitch-shifted by at most the ratio to its neighbour.
+ */
+export function loopWeightsForRpm(rpm: number, loopRpms: readonly number[] = LOOP_RPMS): number[] {
+  const weights = loopRpms.map(() => 0)
+  if (loopRpms.length === 0) return weights
+  if (rpm <= loopRpms[0]!) {
+    weights[0] = 1
+    return weights
+  }
+  const last = loopRpms.length - 1
+  if (rpm >= loopRpms[last]!) {
+    weights[last] = 1
+    return weights
+  }
+  for (let i = 0; i < last; i++) {
+    const low = loopRpms[i]!
+    const high = loopRpms[i + 1]!
+    if (rpm >= low && rpm < high) {
+      const t = (Math.log(rpm) - Math.log(low)) / (Math.log(high) - Math.log(low))
+      weights[i] = Math.cos((t * Math.PI) / 2)
+      weights[i + 1] = Math.sin((t * Math.PI) / 2)
+      return weights
+    }
+  }
+  return weights
+}
 
 export function createAudio(): ShowroomAudio {
   let ctx: AudioContext | null = null
@@ -342,11 +378,17 @@ export function createAudio(): ShowroomAudio {
   let muted = false
   const lastPlayedAt = new Map<SoundName, number>()
 
-  let engineLoop: EngineLoopNodes | null = null
-  let engineState: EngineState = 'stopped'
+  let engineBuffers: EngineBuffers | null = null
+  let engine: EngineNodes | null = null
+  let starter: StarterNodes | null = null
+  let enginePhase: EnginePhase = 'stopped'
+  /** The rpm model's own speed, before the lope and shudder wobbles are added. */
+  let engineRpm = 0
+  /** Context time the current phase began. */
+  let phaseStartedAt = 0
+  let lastTickAt = 0
   let throttleTarget = 0
-  let startTimeout: ReturnType<typeof setTimeout> | null = null
-  let stopTimeout: ReturnType<typeof setTimeout> | null = null
+  let engineTicker: ReturnType<typeof setInterval> | null = null
 
   function ensureContext(): boolean {
     if (ctx && master) return true
@@ -414,222 +456,242 @@ export function createAudio(): ShowroomAudio {
     } catch { /* no-op: audio is optional */ }
   }
 
-  // --- The V8 idle loop ------------------------------------------------------------------------
+  // --- The V8 ----------------------------------------------------------------------------------
 
-  function ensureEngineLoop(context: AudioContext, out: GainNode): EngineLoopNodes {
-    if (engineLoop) return engineLoop
-    const now = context.currentTime
+  function toAudioBuffer(context: AudioContext, samples: Float32Array<ArrayBuffer>): AudioBuffer {
+    const buffer = context.createBuffer(1, samples.length, context.sampleRate)
+    buffer.copyToChannel(samples, 0)
+    return buffer
+  }
 
-    const firingOsc = context.createOscillator()
-    firingOsc.type = 'sawtooth'
-    firingOsc.frequency.value = IDLE_FIRING_HZ
-    const waveshaper = context.createWaveShaper()
-    waveshaper.curve = createDistortionCurve(ENGINE_WAVESHAPER_DRIVE)
-    waveshaper.oversample = '2x'
-    const firingGain = context.createGain()
-    firingGain.gain.value = ENGINE_FIRING_MIX
+  /** Renders the engine loops and starter once, on the first start, at the context's sample rate. */
+  function ensureEngineBuffers(context: AudioContext): EngineBuffers {
+    if (engineBuffers) return engineBuffers
+    const rate = context.sampleRate
+    engineBuffers = {
+      loops: LOOP_RPMS.map((rpm, index) => ({ rpm, buffer: toAudioBuffer(context, generateEngineLoop(rpm, rate, index + 1)) })),
+      starter: toAudioBuffer(context, generateStarterLoop(rate)),
+      solenoid: toAudioBuffer(context, generateSolenoidClunk(rate)),
+    }
+    return engineBuffers
+  }
 
-    const subOsc = context.createOscillator()
-    subOsc.type = 'sine'
-    subOsc.frequency.value = IDLE_FIRING_HZ / 2
-    const subGain = context.createGain()
-    subGain.gain.value = ENGINE_SUB_MIX
-
-    const noiseSource = context.createBufferSource()
-    noiseSource.buffer = getNoiseBuffer(context)
-    noiseSource.loop = true
-    const noiseFilter = context.createBiquadFilter()
-    noiseFilter.type = 'lowpass'
-    noiseFilter.frequency.value = IDLE_FIRING_HZ * ENGINE_NOISE_LOWPASS_MULT
-    const noiseGain = context.createGain()
-    noiseGain.gain.value = ENGINE_NOISE_MIX
-
-    // The cam's lope: a slow wobble on both the firing pitch and its sub-octave.
-    const lopeLfo = context.createOscillator()
-    lopeLfo.type = 'sine'
-    lopeLfo.frequency.value = ENGINE_LOPE_HZ
-    const lopeDepth = context.createGain()
-    lopeDepth.gain.value = IDLE_FIRING_HZ * ENGINE_LOPE_DEPTH
-    const lopeSubDepth = context.createGain()
-    lopeSubDepth.gain.value = (IDLE_FIRING_HZ / 2) * ENGINE_LOPE_DEPTH
-
+  /** Builds and starts the looping engine sources, silent, so the follower can fade them in. */
+  function ensureEngine(context: AudioContext, out: GainNode, now: number): EngineNodes {
+    if (engine) return engine
+    const buffers = ensureEngineBuffers(context)
+    const bus = context.createGain()
+    bus.gain.value = 0
     const lowpass = context.createBiquadFilter()
     lowpass.type = 'lowpass'
-    lowpass.Q.value = ENGINE_LOWPASS_Q
     lowpass.frequency.value = ENGINE_LOWPASS_HZ
-
+    lowpass.Q.value = ENGINE_LOWPASS_Q
     const compressor = context.createDynamicsCompressor()
     compressor.threshold.value = ENGINE_COMPRESSOR_THRESHOLD_DB
     compressor.ratio.value = ENGINE_COMPRESSOR_RATIO
-
-    const bus = context.createGain()
-    bus.gain.value = 0.0001
-
-    firingOsc.connect(waveshaper)
-    waveshaper.connect(firingGain)
-    firingGain.connect(lowpass)
-
-    subOsc.connect(subGain)
-    subGain.connect(lowpass)
-
-    noiseSource.connect(noiseFilter)
-    noiseFilter.connect(noiseGain)
-    noiseGain.connect(lowpass)
-
-    lopeLfo.connect(lopeDepth)
-    lopeDepth.connect(firingOsc.frequency)
-    lopeLfo.connect(lopeSubDepth)
-    lopeSubDepth.connect(subOsc.frequency)
-
+    bus.connect(lowpass)
     lowpass.connect(compressor)
-    compressor.connect(bus)
-    bus.connect(out)
-
-    firingOsc.start(now)
-    subOsc.start(now)
-    noiseSource.start(now)
-    lopeLfo.start(now)
-
-    engineLoop = {
-      firingOsc, waveshaper, firingGain, subOsc, subGain, noiseSource, noiseFilter, noiseGain,
-      lopeLfo, lopeDepth, lopeSubDepth, lowpass, compressor, bus,
-    }
-    return engineLoop
+    compressor.connect(out)
+    const loops = buffers.loops.map(({ rpm, buffer }) => {
+      const source = context.createBufferSource()
+      source.buffer = buffer
+      source.loop = true
+      const gain = context.createGain()
+      gain.gain.value = 0
+      source.connect(gain)
+      gain.connect(bus)
+      source.start(now)
+      return { rpm, source, gain }
+    })
+    engine = { loops, bus, lowpass, compressor }
+    return engine
   }
 
-  /** Eases the loop's firing frequency (and everything that tracks it) toward `amount`'s throttle. */
-  function applyThrottle(context: AudioContext, nodes: EngineLoopNodes, amount: number, includeBus: boolean): void {
+  function teardownEngine(): void {
+    if (!engine) return
+    const nodes = engine
+    for (const loop of nodes.loops) {
+      try {
+        loop.source.stop()
+      } catch { /* already stopped */ }
+      loop.source.disconnect()
+      loop.gain.disconnect()
+    }
+    nodes.bus.disconnect()
+    nodes.lowpass.disconnect()
+    nodes.compressor.disconnect()
+    engine = null
+  }
+
+  function stopTicker(): void {
+    if (engineTicker !== null) clearInterval(engineTicker)
+    engineTicker = null
+  }
+
+  function startTicker(): void {
+    if (engineTicker !== null) return
+    engineTicker = setInterval(() => {
+      try {
+        if (ctx) tickEngine(ctx)
+      } catch { /* no-op: audio is optional */ }
+    }, ENGINE_TICK_MS)
+  }
+
+  /** Points every loop at `rpm` (crossfade weights and playback rates) and the bus at `level`. */
+  function applyEngineRpm(context: AudioContext, nodes: EngineNodes, rpm: number, level: number): void {
     const now = context.currentTime
-    const freq = firingHzForThrottle(amount)
-    nodes.firingOsc.frequency.setTargetAtTime(freq, now, ENGINE_TIME_CONSTANT_S)
-    nodes.subOsc.frequency.setTargetAtTime(freq / 2, now, ENGINE_TIME_CONSTANT_S)
-    nodes.noiseFilter.frequency.setTargetAtTime(freq * ENGINE_NOISE_LOWPASS_MULT, now, ENGINE_TIME_CONSTANT_S)
-    nodes.lopeDepth.gain.setTargetAtTime(freq * ENGINE_LOPE_DEPTH, now, ENGINE_TIME_CONSTANT_S)
-    nodes.lopeSubDepth.gain.setTargetAtTime((freq / 2) * ENGINE_LOPE_DEPTH, now, ENGINE_TIME_CONSTANT_S)
-    if (includeBus) nodes.bus.gain.setTargetAtTime(busGainForThrottle(amount), now, ENGINE_TIME_CONSTANT_S)
+    const weights = loopWeightsForRpm(rpm, nodes.loops.map((loop) => loop.rpm))
+    nodes.loops.forEach((loop, index) => {
+      loop.gain.gain.setTargetAtTime(weights[index]!, now, ENGINE_TICK_SMOOTHING_S)
+      loop.source.playbackRate.setTargetAtTime(Math.max(0.05, rpm / loop.rpm), now, ENGINE_TICK_SMOOTHING_S)
+    })
+    nodes.bus.gain.setTargetAtTime(level, now, ENGINE_TICK_SMOOTHING_S)
   }
 
-  function teardownEngineLoop(): void {
-    if (!engineLoop) return
-    const nodes = engineLoop
-    try {
-      nodes.firingOsc.stop()
-      nodes.subOsc.stop()
-      nodes.noiseSource.stop()
-      nodes.lopeLfo.stop()
-    } catch { /* already stopped */ }
-    for (const node of [
-      nodes.firingOsc, nodes.waveshaper, nodes.firingGain, nodes.subOsc, nodes.subGain,
-      nodes.noiseSource, nodes.noiseFilter, nodes.noiseGain, nodes.lopeLfo, nodes.lopeDepth,
-      nodes.lopeSubDepth, nodes.lowpass, nodes.compressor, nodes.bus,
-    ]) node.disconnect()
-    engineLoop = null
+  /** The idle lope: strongest at idle, gone by `LOPE_FADE_RPM`, slightly irregular. */
+  function lopeAt(time: number, rpm: number): number {
+    const depth = LOPE_RPM * clamp01(1 - (rpm - IDLE_RPM) / (LOPE_FADE_RPM - IDLE_RPM))
+    return depth * (Math.sin(2 * Math.PI * LOPE_HZ * time) + 0.5 * Math.sin(2 * Math.PI * LOPE_HZ * 0.37 * time + 1))
   }
 
-  /** The starter crank, then the catch (idle loop fade-in plus a burst of exhaust pops). Idempotent while running. */
-  function startEngineAudio(context: AudioContext, out: GainNode, now: number, intensity: number): void {
-    if (engineState !== 'stopped') return
-    engineState = 'starting'
-    const amount = 0.6 + 0.4 * clamp01(intensity)
+  /** One step of the rpm model, run by the ticker while the engine is cranking, running or stopping. */
+  function tickEngine(context: AudioContext): void {
+    const now = context.currentTime
+    const dt = Math.min(0.1, Math.max(0, now - lastTickAt))
+    lastTickAt = now
+    const t = now - phaseStartedAt
+
+    if (enginePhase === 'cranking') {
+      if (t >= STARTER_CRANK_SECONDS && master) beginCatch(context, master, now)
+      return
+    }
+    if (!engine) return
+
+    if (enginePhase === 'catching') {
+      engineRpm = t < CATCH_RISE_S
+        ? lerp(CATCH_START_RPM, CATCH_FLARE_RPM, easeOut(t / CATCH_RISE_S))
+        : IDLE_RPM + (CATCH_FLARE_RPM - IDLE_RPM) * Math.exp(-(t - CATCH_RISE_S) / CATCH_FLARE_DECAY_S)
+      const swell = clamp01(t / CATCH_SWELL_S)
+      applyEngineRpm(context, engine, engineRpm + lopeAt(now, engineRpm), levelForRpm(engineRpm) * swell)
+      if (t >= CATCH_FLARE_SECONDS) {
+        enginePhase = 'running'
+        phaseStartedAt = now
+      }
+      return
+    }
+
+    if (enginePhase === 'running') {
+      const target = rpmForThrottle(throttleTarget)
+      const timeConstant = target > engineRpm ? RPM_RISE_TIME_CONSTANT_S : RPM_FALL_TIME_CONSTANT_S
+      engineRpm += (target - engineRpm) * (1 - Math.exp(-dt / timeConstant))
+      applyEngineRpm(context, engine, engineRpm + lopeAt(now, engineRpm), levelForRpm(engineRpm))
+      return
+    }
+
+    if (enginePhase === 'stopping') {
+      engineRpm -= STOP_RPM_FALL_PER_SECOND * dt
+      if (engineRpm <= STOP_STALL_RPM) {
+        finishStop()
+        return
+      }
+      const dying = clamp01((engineRpm - STOP_STALL_RPM) / (IDLE_RPM - STOP_STALL_RPM))
+      const shudder = STOP_SHUDDER_RPM * (1 - dying) * Math.sin(2 * Math.PI * STOP_SHUDDER_HZ * t)
+      applyEngineRpm(context, engine, engineRpm + shudder, levelForRpm(engineRpm) * Math.sqrt(dying))
+    }
+  }
+
+  /** Lets the starter zing free and disengage, then removes its nodes. */
+  function releaseStarter(now: number): void {
+    if (!starter) return
+    const nodes = starter
+    starter = null
+    nodes.source.playbackRate.cancelScheduledValues(now)
+    nodes.source.playbackRate.setValueAtTime(nodes.source.playbackRate.value, now)
+    nodes.source.playbackRate.linearRampToValueAtTime(STARTER_DISENGAGE_RATE, now + STARTER_RELEASE_S)
+    nodes.gain.gain.cancelScheduledValues(now)
+    nodes.gain.gain.setValueAtTime(Math.max(0.0001, nodes.gain.gain.value), now)
+    nodes.gain.gain.exponentialRampToValueAtTime(0.0001, now + STARTER_RELEASE_S)
+    nodes.source.stop(now + STARTER_RELEASE_S + 0.05)
+    nodes.source.onended = () => {
+      nodes.source.disconnect()
+      nodes.gain.disconnect()
+    }
+  }
+
+  /** The engine fires: the starter disengages, a burst of pops, and the loops swell in on the flare. */
+  function beginCatch(context: AudioContext, out: GainNode, now: number): void {
+    enginePhase = 'catching'
+    phaseStartedAt = now
+    engineRpm = CATCH_START_RPM
+    releaseStarter(now)
+    ensureEngine(context, out, now)
     const buffer = getNoiseBuffer(context)
-
-    const crankOsc = context.createOscillator()
-    crankOsc.type = 'sawtooth'
-    crankOsc.frequency.value = STARTER_CRANK_HZ
-    const crankLowpass = context.createBiquadFilter()
-    crankLowpass.type = 'lowpass'
-    crankLowpass.frequency.value = STARTER_LOWPASS_HZ
-    const chopOsc = context.createOscillator()
-    chopOsc.type = 'square'
-    chopOsc.frequency.value = STARTER_MOD_HZ
-    const chopDepth = context.createGain()
-    chopDepth.gain.value = STARTER_CHOP_BASE
-    const ampGain = context.createGain()
-    ampGain.gain.value = STARTER_CHOP_BASE
-    const envelopeGain = context.createGain()
-    envelopeGain.gain.setValueAtTime(0.0001, now)
-    envelopeGain.gain.linearRampToValueAtTime(STARTER_PEAK * amount, now + STARTER_ATTACK_S)
-    envelopeGain.gain.setValueAtTime(STARTER_PEAK * amount, now + STARTER_DURATION_S - STARTER_RELEASE_S)
-    envelopeGain.gain.linearRampToValueAtTime(0.0001, now + STARTER_DURATION_S)
-
-    crankOsc.connect(crankLowpass)
-    crankLowpass.connect(ampGain)
-    chopOsc.connect(chopDepth)
-    chopDepth.connect(ampGain.gain)
-    ampGain.connect(envelopeGain)
-    envelopeGain.connect(out)
-
-    const crankStopAt = now + STARTER_DURATION_S + 0.05
-    crankOsc.start(now)
-    chopOsc.start(now)
-    crankOsc.stop(crankStopAt)
-    chopOsc.stop(crankStopAt)
-    crankOsc.onended = () => {
-      crankOsc.disconnect()
-      crankLowpass.disconnect()
-      ampGain.disconnect()
-      envelopeGain.disconnect()
-    }
-    chopOsc.onended = () => {
-      chopOsc.disconnect()
-      chopDepth.disconnect()
-    }
-
-    const catchTime = now + STARTER_DURATION_S
-    const nodes = ensureEngineLoop(context, out)
-    applyThrottle(context, nodes, throttleTarget, false)
-    nodes.bus.gain.cancelScheduledValues(catchTime)
-    nodes.bus.gain.setValueAtTime(0.0001, catchTime)
-    nodes.bus.gain.exponentialRampToValueAtTime(busGainForThrottle(throttleTarget), catchTime + CATCH_FADE_IN_S)
-
     for (let i = 0; i < CATCH_POP_COUNT; i++) {
-      const t = catchTime + (i / CATCH_POP_COUNT) * CATCH_POP_BURST_S + Math.random() * 0.01
-      playExhaustPop(context, out, buffer, t, CATCH_POP_PEAK * (1 - i * 0.18) * amount)
+      const at = now + 0.04 + i * 0.09 + Math.random() * 0.02
+      playExhaustPop(context, out, buffer, at, CATCH_POP_PEAK * (1 - i * 0.2))
     }
-
-    if (startTimeout !== null) clearTimeout(startTimeout)
-    startTimeout = setTimeout(() => {
-      if (engineState === 'starting') engineState = 'running'
-      startTimeout = null
-    }, (STARTER_DURATION_S + CATCH_FADE_IN_S) * 1000)
   }
 
-  /** The falling-rpm shutdown: idle loop pitch and level fall over `STOP_FALL_S` with two pops. */
+  /** The starter sequence: solenoid clunk, then the motor labouring up to cranking speed. Idempotent while running. */
+  function startEngineAudio(context: AudioContext, out: GainNode, now: number, intensity: number): void {
+    if (enginePhase !== 'stopped') return
+    const amount = 0.6 + 0.4 * clamp01(intensity)
+    const buffers = ensureEngineBuffers(context)
+    enginePhase = 'cranking'
+    phaseStartedAt = now
+    lastTickAt = now
+    engineRpm = 0
+
+    const clunk = context.createBufferSource()
+    clunk.buffer = buffers.solenoid
+    const clunkGain = context.createGain()
+    clunkGain.gain.value = SOLENOID_LEVEL * amount
+    clunk.connect(clunkGain)
+    clunkGain.connect(out)
+    clunk.start(now)
+    clunk.onended = () => {
+      clunk.disconnect()
+      clunkGain.disconnect()
+    }
+
+    const source = context.createBufferSource()
+    source.buffer = buffers.starter
+    source.loop = true
+    source.playbackRate.setValueAtTime(STARTER_START_RATE, now)
+    source.playbackRate.linearRampToValueAtTime(1, now + STARTER_SPIN_UP_S)
+    const gain = context.createGain()
+    gain.gain.setValueAtTime(0.0001, now)
+    gain.gain.exponentialRampToValueAtTime(STARTER_LEVEL * amount, now + STARTER_ATTACK_S)
+    source.connect(gain)
+    gain.connect(out)
+    source.start(now + 0.06)
+    starter = { source, gain }
+    startTicker()
+  }
+
+  function finishStop(): void {
+    teardownEngine()
+    stopTicker()
+    enginePhase = 'stopped'
+    engineRpm = 0
+  }
+
+  /** Shutdown: the rpm falls away with two pops until the engine stalls; mid-crank it just lets the starter go. */
   function stopEngineAudio(context: AudioContext, out: GainNode, now: number, intensity: number): void {
-    if (engineState === 'stopped' || engineState === 'stopping' || !engineLoop) return
-    engineState = 'stopping'
-    const nodes = engineLoop
+    if (enginePhase === 'stopped' || enginePhase === 'stopping') return
+    if (enginePhase === 'cranking') {
+      releaseStarter(now)
+      finishStop()
+      return
+    }
+    enginePhase = 'stopping'
+    phaseStartedAt = now
     const amount = 0.6 + 0.4 * clamp01(intensity)
     const buffer = getNoiseBuffer(context)
-
-    nodes.firingOsc.frequency.cancelScheduledValues(now)
-    nodes.firingOsc.frequency.setValueAtTime(nodes.firingOsc.frequency.value, now)
-    nodes.firingOsc.frequency.exponentialRampToValueAtTime(STOP_END_FREQ_HZ, now + STOP_FALL_S)
-    nodes.subOsc.frequency.cancelScheduledValues(now)
-    nodes.subOsc.frequency.setValueAtTime(nodes.subOsc.frequency.value, now)
-    nodes.subOsc.frequency.exponentialRampToValueAtTime(STOP_END_FREQ_HZ / 2, now + STOP_FALL_S)
-    nodes.noiseFilter.frequency.cancelScheduledValues(now)
-    nodes.noiseFilter.frequency.setValueAtTime(nodes.noiseFilter.frequency.value, now)
-    nodes.noiseFilter.frequency.exponentialRampToValueAtTime(STOP_END_FREQ_HZ * ENGINE_NOISE_LOWPASS_MULT, now + STOP_FALL_S)
-    nodes.bus.gain.cancelScheduledValues(now)
-    nodes.bus.gain.setValueAtTime(nodes.bus.gain.value, now)
-    nodes.bus.gain.exponentialRampToValueAtTime(0.0001, now + STOP_FALL_S)
-
     for (let i = 0; i < STOP_POP_COUNT; i++) {
-      const t = now + STOP_FALL_S * (0.3 + i * 0.35) + Math.random() * 0.04
-      playExhaustPop(context, out, buffer, t, STOP_POP_PEAK * (1 - i * 0.25) * amount)
+      const at = now + 0.25 + i * 0.32 + Math.random() * 0.05
+      playExhaustPop(context, out, buffer, at, STOP_POP_PEAK * (1 - i * 0.25) * amount)
     }
-
-    if (startTimeout !== null) {
-      clearTimeout(startTimeout)
-      startTimeout = null
-    }
-    if (stopTimeout !== null) clearTimeout(stopTimeout)
-    stopTimeout = setTimeout(() => {
-      teardownEngineLoop()
-      engineState = 'stopped'
-      stopTimeout = null
-    }, (STOP_FALL_S + 0.1) * 1000)
   }
 
   function voiceStarter(context: AudioContext, out: GainNode, _buffer: AudioBuffer, now: number, intensity: number): void {
@@ -670,26 +732,28 @@ export function createAudio(): ShowroomAudio {
     })
   }
 
+  /** The rpm follower reads the target on its next tick, so this only records it. */
   function setThrottle(amount: number): void {
     throttleTarget = clamp01(amount)
-    withAudio((context) => {
-      if (!engineLoop || engineState !== 'running') return
-      applyThrottle(context, engineLoop, throttleTarget, true)
-    })
   }
 
   function dispose(): void {
     try {
-      if (startTimeout !== null) clearTimeout(startTimeout)
-      if (stopTimeout !== null) clearTimeout(stopTimeout)
-      teardownEngineLoop()
+      stopTicker()
+      if (starter) {
+        starter.source.stop()
+        starter.source.disconnect()
+        starter.gain.disconnect()
+      }
+      teardownEngine()
       master?.disconnect()
       void ctx?.close()
     } catch { /* no-op: audio is optional */ } finally {
-      startTimeout = null
-      stopTimeout = null
-      engineState = 'stopped'
+      starter = null
+      enginePhase = 'stopped'
+      engineRpm = 0
       throttleTarget = 0
+      engineBuffers = null
       noiseBuffer = null
       ctx = null
       master = null

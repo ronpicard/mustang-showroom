@@ -51,8 +51,8 @@ function disposeAll(items: readonly Disposable[]): void {
 // Palette
 // -------------------------------------------------------------------------------------------
 
-const WALL_COLOR = 0x141517
-const CEILING_COLOR = 0x0c0c0e
+const WALL_COLOR = 0x8e9096
+const CEILING_COLOR = 0x6e7076
 const TURNTABLE_TOP_COLOR = 0x141416
 const TURNTABLE_EDGE_COLOR = 0xa0a4a8
 const LED_COLOR = 0xdfe8ff
@@ -131,21 +131,21 @@ const SOFTBOX_WIDTH = 30
 const SOFTBOX_Y = 150
 const SOFTBOX_X = 70
 const SOFTBOX_TILT = THREE.MathUtils.degToRad(12)
-const SOFTBOX_INTENSITY = 1.4
+const SOFTBOX_INTENSITY = 1.3
 const SOFTBOX_FRAME_THICKNESS = 2
 
 /** Six recessed can lights in a ring above the turntable. */
 const CAN_LIGHT_COUNT = 6
 const CAN_LIGHT_RING_RADIUS = 150
 const CAN_LIGHT_DIAMETER = 10
-const CAN_LIGHT_DISC_INTENSITY = 2.5
+const CAN_LIGHT_DISC_INTENSITY = 3.5
 /**
  * three 0.186 keeps physically-based lighting on at all times, so `SpotLight.intensity` is in
  * candela. At ~150 in throw with `decay = 1.4` and the engine's ACES exposure of 1.0, 2500 cd
  * reads as a bright but not blown-out pool; pick this as the starting point and let the engine
  * author retune once the car materials are in.
  */
-const CAN_LIGHT_SPOT_INTENSITY = 2500
+const CAN_LIGHT_SPOT_INTENSITY = 6500
 const CAN_LIGHT_SPOT_DECAY = 1.4
 const CAN_LIGHT_SPOT_ANGLE = 0.55
 const CAN_LIGHT_SPOT_PENUMBRA = 0.6
@@ -156,17 +156,23 @@ const CAN_LIGHT_SHADOW_NORMAL_BIAS = 0.02
  * from the front-left, one from the rear-right, so the car reads shadows from two directions. */
 const CAN_LIGHT_SHADOW_INDICES: ReadonlySet<number> = new Set([2, 5])
 
-const HEMI_SKY_COLOR = 0x3a3d44
-const HEMI_GROUND_COLOR = 0x0a0a0c
-const HEMI_INTENSITY = 0.35
+const HEMI_SKY_COLOR = 0xb8bcc6
+const HEMI_GROUND_COLOR = 0x55565c
+const HEMI_INTENSITY = 1.4
 const AMBIENT_COLOR = 0xffffff
-const AMBIENT_INTENSITY = 0.08
+const AMBIENT_INTENSITY = 0.35
 
 const TURNTABLE_SEGMENTS = 72
 /** The brushed edge ring's radial thickness. */
 const TURNTABLE_EDGE_WIDTH = 2
 const TURNTABLE_EDGE_HEIGHT = 0.6
 /** The recessed LED ring sits just inside the platform's edge, mounted to the floor (static). */
+const CONTACT_SHADOW_LENGTH = 205
+const CONTACT_SHADOW_WIDTH = 92
+const CONTACT_SHADOW_OPACITY = 0.7
+const CONTACT_SHADOW_LIFT = 0.08
+const CONTACT_SHADOW_TEXTURE_SIZE = 256
+
 const LED_RING_RADIUS = TURNTABLE_RADIUS - 3
 const LED_RING_TUBE_RADIUS = 0.4
 const LED_RING_INTENSITY = 2.5
@@ -205,11 +211,30 @@ function finishColorTexture(canvas: HTMLCanvasElement, repeat: number): THREE.Ca
 }
 
 /** Faint large mottling plus a fine grid of tile seams, both at very low contrast. */
+/** A black ellipse fading to transparent at the edges, stretched over the car's footprint. */
+function createContactShadowTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas')
+  canvas.width = CONTACT_SHADOW_TEXTURE_SIZE
+  canvas.height = CONTACT_SHADOW_TEXTURE_SIZE
+  const context = canvas.getContext('2d')!
+  const half = CONTACT_SHADOW_TEXTURE_SIZE / 2
+  const gradient = context.createRadialGradient(half, half, half * 0.15, half, half, half)
+  gradient.addColorStop(0, 'rgba(0, 0, 0, 1)')
+  gradient.addColorStop(0.45, 'rgba(0, 0, 0, 0.75)')
+  gradient.addColorStop(0.8, 'rgba(0, 0, 0, 0.2)')
+  gradient.addColorStop(1, 'rgba(0, 0, 0, 0)')
+  context.fillStyle = gradient
+  context.fillRect(0, 0, CONTACT_SHADOW_TEXTURE_SIZE, CONTACT_SHADOW_TEXTURE_SIZE)
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  return texture
+}
+
 const FLOOR_TEXTURE_SEED = 0x9f00d
-const FLOOR_BASE_COLOR = '#101013'
-const FLOOR_MOTTLE_LIGHT = 'rgba(148, 152, 160, 0.05)'
-const FLOOR_MOTTLE_DARK = 'rgba(0, 0, 0, 0.05)'
-const FLOOR_SEAM_COLOR = 'rgba(180, 184, 190, 0.06)'
+const FLOOR_BASE_COLOR = '#5c5e64'
+const FLOOR_MOTTLE_LIGHT = 'rgba(200, 204, 210, 0.08)'
+const FLOOR_MOTTLE_DARK = 'rgba(0, 0, 0, 0.08)'
+const FLOOR_SEAM_COLOR = 'rgba(230, 232, 236, 0.14)'
 
 function makeFloorTexture(): THREE.CanvasTexture {
   const { canvas, ctx } = makeCanvas(FLOOR_TEXTURE_SIZE)
@@ -268,7 +293,7 @@ function buildFloor(): FloorBuild {
   const reflector = new Reflector(reflectorGeometry, {
     textureWidth: 1024,
     textureHeight: 1024,
-    color: 0x303030,
+    color: 0x707070,
     clipBias: 0.003,
   })
   reflector.rotation.x = -Math.PI / 2
@@ -376,6 +401,26 @@ function buildTurntable(): TurntableBuild {
   edgeLip.receiveShadow = true
 
   turntable.add(platform, edgeTop, edgeLip)
+
+  // A soft contact shadow under the car's footprint: the spot shadows ground the car from two
+  // directions, and this radial gradient darkens the platform directly beneath it the way the
+  // occluded floor under a real car reads, whatever angle the lights come from.
+  const contactShadow = new THREE.Mesh(
+    new THREE.PlaneGeometry(CONTACT_SHADOW_LENGTH, CONTACT_SHADOW_WIDTH),
+    new THREE.MeshBasicMaterial({
+      map: createContactShadowTexture(),
+      transparent: true,
+      opacity: CONTACT_SHADOW_OPACITY,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    }),
+  )
+  contactShadow.rotation.x = -Math.PI / 2
+  contactShadow.position.set(CAR_CENTER[0], TURNTABLE_HEIGHT + CONTACT_SHADOW_LIFT, CAR_CENTER[2])
+  contactShadow.renderOrder = 1
+  turntable.add(contactShadow)
 
   const ledMaterial = new THREE.MeshStandardMaterial({
     color: 0x0a0a0c,

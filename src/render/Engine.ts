@@ -34,19 +34,22 @@ import {
 import type { EngineApi, EngineEvents, EngineSnapshot, ViewInsets } from './engineApi.ts'
 import { createCarAssembly } from './carAssembly.ts'
 import { createShowroom } from './showroom.ts'
+import { CATCH_FLARE_SECONDS, STARTER_CRANK_SECONDS } from '../engineSound.ts'
 
 // -------------------------------------------------------------------------------------------
 // Renderer / post-processing look
 // -------------------------------------------------------------------------------------------
 
-const BACKGROUND_COLOR = 0x08080a
-const TONE_MAPPING_EXPOSURE = 1.0
-const ENVIRONMENT_INTENSITY = 0.9
+const BACKGROUND_COLOR = 0x3a3c42
+const TONE_MAPPING_EXPOSURE = 1.15
+const ENVIRONMENT_INTENSITY = 1.1
 /** Sigma for the environment map's PMREM blur: a soft, wide light source, not a mirror. */
 const ENVIRONMENT_SIGMA = 0.02
+/** MSAA samples on the post-processing target; 0 would alias every edge of the car. */
+const COMPOSER_MSAA_SAMPLES = 4
 const BLOOM_STRENGTH = 0.14
 const BLOOM_RADIUS = 0.3
-const BLOOM_THRESHOLD = 1.35
+const BLOOM_THRESHOLD = 1.6
 
 /**
  * Rendering cost steps, best first. The engine starts at the first step a device can likely
@@ -186,6 +189,13 @@ const HEADLIGHT_COLOR = 0xfff1cc
 /** Candela-scale intensity: tuned to show two pools on the floor and wall ahead of the car under
  * the engine's ACES tone mapping at exposure 1.0. Revisit alongside the showroom's own lights. */
 const HEADLIGHT_INTENSITY = 9000
+/** Engine-bay shake multipliers (1 = the running rattle) while cranking, at the catch, and dying on shutdown. */
+const ENGINE_SHAKE_CRANK = 0.55
+const ENGINE_SHAKE_CATCH = 2.6
+/** The catch shudder settles over this fraction of the audio's flare. */
+const ENGINE_SHAKE_SETTLE_FRACTION = 0.4
+const ENGINE_SHAKE_STOP = 1.8
+const ENGINE_SHAKE_STOP_SECONDS = 0.9
 const HEADLIGHT_ANGLE = 0.42
 const HEADLIGHT_PENUMBRA = 0.5
 const HEADLIGHT_DECAY = 1.5
@@ -268,7 +278,10 @@ export function createEngine(canvas: HTMLCanvasElement, events: EngineEvents): E
 
   // --- Post-processing --------------------------------------------------------------------------
 
-  const composer = new EffectComposer(renderer)
+  // A multisampled target keeps the edges anti-aliased through the bloom pass (a plain composer
+  // target would drop the canvas's own MSAA); half floats keep the bloom's HDR headroom.
+  const composerTarget = new THREE.WebGLRenderTarget(1, 1, { samples: COMPOSER_MSAA_SAMPLES, type: THREE.HalfFloatType })
+  const composer = new EffectComposer(renderer, composerTarget)
   const renderPass = new RenderPass(scene, camera)
   const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), BLOOM_STRENGTH, BLOOM_RADIUS, BLOOM_THRESHOLD)
   const outputPass = new OutputPass()
@@ -598,6 +611,8 @@ export function createEngine(canvas: HTMLCanvasElement, events: EngineEvents): E
   const openCurrent: Record<HingedPartId, number> = { hood: 0, doorLeft: 0, doorRight: 0, trunkLid: 0 }
   let headlightsOn = false
   let engineRunning = false
+  /** `elapsedTime` when the engine last started or stopped, for the start-up and shutdown shudders. */
+  let engineToggledAt = 0
   let turntableOn = true
   let paused = false
   let selectedId: PartId | null = null
@@ -652,9 +667,25 @@ export function createEngine(canvas: HTMLCanvasElement, events: EngineEvents): E
     events.onSound(on ? 'lightsOn' : 'lightsOff', 1)
   }
 
+  /**
+   * How hard the engine bay shakes `sinceToggle` seconds after the last start or stop, in step
+   * with the sound: a lurch while the starter cranks, a heavy shudder as it catches and flares,
+   * settling to the running rattle; on shutdown a dying shudder that fades out.
+   */
+  function engineShakeAmount(sinceToggle: number): number {
+    if (engineRunning) {
+      if (sinceToggle < STARTER_CRANK_SECONDS) return ENGINE_SHAKE_CRANK
+      const sinceCatch = sinceToggle - STARTER_CRANK_SECONDS
+      return 1 + (ENGINE_SHAKE_CATCH - 1) * Math.exp(-sinceCatch / (CATCH_FLARE_SECONDS * ENGINE_SHAKE_SETTLE_FRACTION))
+    }
+    if (sinceToggle >= ENGINE_SHAKE_STOP_SECONDS) return 0
+    return ENGINE_SHAKE_STOP * (1 - sinceToggle / ENGINE_SHAKE_STOP_SECONDS)
+  }
+
   function setEngineRunning(on: boolean): void {
     if (on === engineRunning) return
     engineRunning = on
+    engineToggledAt = elapsedTime
     events.onSound(on ? 'starter' : 'engineStop', 1)
   }
 
@@ -830,7 +861,7 @@ export function createEngine(canvas: HTMLCanvasElement, events: EngineEvents): E
       assembly.setOpenness(part, openCurrent[part])
     }
 
-    assembly.setEngineShake(engineRunning ? 1 : 0, elapsedTime)
+    assembly.setEngineShake(engineShakeAmount(elapsedTime - engineToggledAt), elapsedTime)
 
     if (turntableOn && (currentPreset === 'showcase' || currentPreset === 'custom')) {
       showroom.turntable.rotation.y += TURNTABLE_SPIN_RATE * dt

@@ -16,7 +16,6 @@ interface ToolbarProps {
   muted: boolean
   onToggleMute: () => void
   onOpenAbout: () => void
-  onOpenMenu: () => void
   paint: PaintId
   onSelectPaint: (id: PaintId) => void
   explode: number
@@ -67,7 +66,6 @@ export default function Toolbar({
   muted,
   onToggleMute,
   onOpenAbout,
-  onOpenMenu,
   paint,
   onSelectPaint,
   explode,
@@ -164,9 +162,6 @@ export default function Toolbar({
           </button>
           <button type="button" className="icon-button" aria-label="About" onClick={onOpenAbout}>
             <span className="icon-button-caption">About</span>
-          </button>
-          <button type="button" className="icon-button" aria-label="Menu" onClick={onOpenMenu}>
-            <span className="icon-button-caption">Menu</span>
           </button>
         </div>
       </div>

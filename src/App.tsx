@@ -9,13 +9,9 @@ import type { EngineApi, EngineEvents, ViewInsets } from './render/engineApi.ts'
 import AboutPanel from './ui/AboutPanel.tsx'
 import GameCanvas from './ui/GameCanvas.tsx'
 import InfoPanel from './ui/InfoPanel.tsx'
-import Menu from './ui/Menu.tsx'
 import PartsPanel from './ui/PartsPanel.tsx'
 import Toolbar from './ui/Toolbar.tsx'
 import { loadSettings, safeLocalStorage, saveSettings } from './ui/storage.ts'
-
-/** The two screens the shell can show. The engine keeps rendering behind both. */
-type Mode = 'menu' | 'showroom'
 
 /** A docked side panel narrower than this share of the window; wider counts as a bottom sheet. */
 const DOCKED_PANEL_MAX_FRACTION = 0.6
@@ -29,16 +25,15 @@ const DEFAULT_OPEN: Record<HingedPartId, boolean> = {
 
 /**
  * Top-level app shell. Owns the engine handle, the audio module, all showroom state (paint,
- * explode, open panels, headlights, engine, camera, selection/hover) and the menu/about/parts
- * screens. The canvas is mounted once, full-screen, behind every overlay; `Menu`, `Toolbar`,
- * `PartsPanel`, `InfoPanel` and `AboutPanel` are just panels on top of it.
+ * explode, open panels, headlights, engine, camera, selection/hover) and the about/parts panels.
+ * The canvas is mounted once, full-screen, behind every overlay; `Toolbar`, `PartsPanel`,
+ * `InfoPanel` and `AboutPanel` are just panels on top of it.
  */
 export default function App() {
   const [storage] = useState(() => safeLocalStorage())
   const [audio] = useState<ShowroomAudio>(() => createAudio())
   const [settings, setSettings] = useState<Settings>(() => loadSettings(storage))
 
-  const [mode, setMode] = useState<Mode>('menu')
   const [paused, setPaused] = useState(false)
   const [api, setApi] = useState<EngineApi | null>(null)
 
@@ -144,7 +139,7 @@ export default function App() {
       observer.disconnect()
       window.removeEventListener('resize', update)
     }
-  }, [api, mode])
+  }, [api])
 
   // Sheets and the info panel animate via CSS transform, which ResizeObserver does not see;
   // re-measure once immediately and once after the transition settles.
@@ -153,11 +148,6 @@ export default function App() {
     const timer = window.setTimeout(() => updateInsetsRef.current(), 260)
     return () => window.clearTimeout(timer)
   }, [partsOpen, selected, aboutOpen])
-
-  function handleEnterShowroom() {
-    setMode('showroom')
-    audio.resume()
-  }
 
   function handleDeselect() {
     setSelected(null)
@@ -270,10 +260,9 @@ export default function App() {
   }
 
   // Every keyboard binding reads through this ref instead of closing over state directly, so the
-  // listener (attached once per [mode, paused] pair) always calls the freshest handler without
+  // listener (attached once per `paused` value) always calls the freshest handler without
   // needing every piece of state in its dependency array.
   const handlersRef = useRef({
-    enter: handleEnterShowroom,
     cameraPreset: handleCameraPreset,
     toggleExplode: handleToggleExplode,
     toggleHood: () => handleToggleOpen('hood'),
@@ -290,11 +279,9 @@ export default function App() {
     escape: () => {
       if (aboutOpen) setAboutOpen(false)
       else if (selected !== null) handleDeselect()
-      else setMode('menu')
     },
   })
   handlersRef.current = {
-    enter: handleEnterShowroom,
     cameraPreset: handleCameraPreset,
     toggleExplode: handleToggleExplode,
     toggleHood: () => handleToggleOpen('hood'),
@@ -311,14 +298,13 @@ export default function App() {
     escape: () => {
       if (aboutOpen) setAboutOpen(false)
       else if (selected !== null) handleDeselect()
-      else setMode('menu')
     },
   }
 
-  // Keyboard bindings (showroom mode): 1-9 camera presets, E explode, H/D/T hood/doors/trunk,
+  // Keyboard bindings: 1-9 camera presets, E explode, H/D/T hood/doors/trunk,
   // L headlights, S start/stop engine, Space hold to rev, R turntable, P next paint, M mute,
-  // ?/I about, Escape closes About, else deselects, else opens the menu. Menu mode: Enter/Space
-  // enters. Ignored while an input/select has focus, or while paused.
+  // ?/I about, Escape closes About, else deselects. Ignored while an input/select has focus, or
+  // while paused.
   useEffect(() => {
     function isEditable(target: EventTarget | null): boolean {
       return target instanceof HTMLElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
@@ -326,13 +312,6 @@ export default function App() {
     function onKeyDown(e: KeyboardEvent) {
       if (isEditable(e.target)) return
       if (paused) return
-      if (mode === 'menu') {
-        if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) {
-          e.preventDefault()
-          handlersRef.current.enter()
-        }
-        return
-      }
       if (e.key === ' ') {
         e.preventDefault()
         if (!e.repeat) handlersRef.current.revStart()
@@ -402,7 +381,7 @@ export default function App() {
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
     }
-  }, [mode, paused])
+  }, [paused])
 
   const events: EngineEvents = {
     onHover: (id) => setHovered(id),
@@ -422,59 +401,52 @@ export default function App() {
       <GameCanvas events={events} onReady={setApi} />
 
       <div className="overlay-layer">
-        {mode === 'menu' && <Menu onEnter={handleEnterShowroom} />}
+        <Toolbar
+          cameraPreset={cameraPreset}
+          onCameraPreset={handleCameraPreset}
+          turntable={settings.turntable}
+          onToggleTurntable={handleToggleTurntable}
+          headlights={headlights}
+          onToggleHeadlights={handleToggleHeadlights}
+          engineRunning={engineRunning}
+          onToggleEngine={handleToggleEngine}
+          onRevStart={handleRevStart}
+          onRevEnd={handleRevEnd}
+          muted={settings.muted}
+          onToggleMute={handleToggleMute}
+          onOpenAbout={() => setAboutOpen(true)}
+          paint={settings.paint}
+          onSelectPaint={handleSelectPaint}
+          explode={explode}
+          onExplodeChange={handleExplodeChange}
+          onResetExplode={() => handleExplodeChange(0)}
+          open={open}
+          onToggleHood={() => handleToggleOpen('hood')}
+          onToggleDoors={handleToggleDoors}
+          onToggleTrunk={() => handleToggleOpen('trunkLid')}
+          partsOpen={partsOpen}
+          onTogglePartsOpen={() => setPartsOpen((current) => !current)}
+        />
 
-        {mode === 'showroom' && (
-          <>
-            <Toolbar
-              cameraPreset={cameraPreset}
-              onCameraPreset={handleCameraPreset}
-              turntable={settings.turntable}
-              onToggleTurntable={handleToggleTurntable}
-              headlights={headlights}
-              onToggleHeadlights={handleToggleHeadlights}
-              engineRunning={engineRunning}
-              onToggleEngine={handleToggleEngine}
-              onRevStart={handleRevStart}
-              onRevEnd={handleRevEnd}
-              muted={settings.muted}
-              onToggleMute={handleToggleMute}
-              onOpenAbout={() => setAboutOpen(true)}
-              onOpenMenu={() => setMode('menu')}
-              paint={settings.paint}
-              onSelectPaint={handleSelectPaint}
-              explode={explode}
-              onExplodeChange={handleExplodeChange}
-              onResetExplode={() => handleExplodeChange(0)}
-              open={open}
-              onToggleHood={() => handleToggleOpen('hood')}
-              onToggleDoors={handleToggleDoors}
-              onToggleTrunk={() => handleToggleOpen('trunkLid')}
-              partsOpen={partsOpen}
-              onTogglePartsOpen={() => setPartsOpen((current) => !current)}
-            />
+        <PartsPanel
+          selected={selected}
+          onSelect={handleSelectPart}
+          open={partsOpen}
+          onClose={() => setPartsOpen(false)}
+        />
 
-            <PartsPanel
-              selected={selected}
-              onSelect={handleSelectPart}
-              open={partsOpen}
-              onClose={() => setPartsOpen(false)}
-            />
+        <InfoPanel
+          selected={selected}
+          open={open}
+          onFocus={() => selected && api?.focusPart(selected)}
+          onToggleOpen={handleToggleOpen}
+          onClose={handleDeselect}
+        />
 
-            <InfoPanel
-              selected={selected}
-              open={open}
-              onFocus={() => selected && api?.focusPart(selected)}
-              onToggleOpen={handleToggleOpen}
-              onClose={handleDeselect}
-            />
-
-            {hovered && pointerPos && (
-              <div className="hover-chip" style={{ left: pointerPos.x + 16, top: pointerPos.y + 16 }}>
-                {partById(hovered).name}
-              </div>
-            )}
-          </>
+        {hovered && pointerPos && (
+          <div className="hover-chip" style={{ left: pointerPos.x + 16, top: pointerPos.y + 16 }}>
+            {partById(hovered).name}
+          </div>
         )}
 
         {aboutOpen && <AboutPanel onClose={() => setAboutOpen(false)} />}

@@ -2,6 +2,18 @@
 
 All notable changes to Mustang Showroom are documented in this file, following the [Keep a Changelog](https://keepachangelog.com/) format.
 
+## [Unreleased]
+
+### Changed
+
+- The showroom is much brighter: light grey walls, ceiling and floor with a more even fill, so the car reads clearly from every angle, and a soft contact shadow grounds it on the turntable.
+- The engine sounds like a V8: a solenoid clunk, a labouring starter crank, the catch with a burst of pops and an rpm flare that settles into a lumpy idle, a rev that climbs through the rev range, and a shutdown that winds down with two pops. The engine bay lurches while cranking, shudders on the catch and settles into its running rattle in time with the sound.
+- Smoother edges: the render passes are multisampled.
+
+### Removed
+
+- The start screen. The showroom loads straight in, and the keyboard reference now lives in the About panel under Controls.
+
 ## [1.0.0] - 2026-09-26
 
 ### Added

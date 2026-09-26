@@ -1,6 +1,6 @@
 # Mustang Showroom
 
-Mustang Showroom is a 1969 Ford Mustang SportsRoof — a Mach 1 dressed in the John Wick "Boss 429" look — standing on a turntable in a dark, polished dealership at night. Orbit it, change the paint, open the hood, doors and trunk, drag the explode slider to pull it apart into its parts, click any part to read about it, switch on the headlights, and start the engine. Play the [live demo](https://ronpicard.github.io/mustang-showroom/) — it works on both phones and desktops.
+Mustang Showroom is a 1969 Ford Mustang SportsRoof — a Mach 1 dressed in the John Wick "Boss 429" look — standing on a turntable in a bright, polished dealership showroom. It opens straight into the showroom: orbit the car, change the paint, open the hood, doors and trunk, drag the explode slider to pull it apart into its parts, click any part to read about it, switch on the headlights, and start the engine. Play the [live demo](https://ronpicard.github.io/mustang-showroom/) — it works on both phones and desktops.
 
 There is no game and no scoring: it is a car to look at and take apart.
 
@@ -11,7 +11,7 @@ There is no game and no scoring: it is a car to look at and take apart.
 - Open the hood, both doors and the trunk, individually or all at once.
 - Drag the explode slider to pull every panel, trim piece, wheel, chassis component and engine part apart along its own path, staggered so the outer panels move first.
 - Click any part of the car — inside or out, open or exploded — to select it, fly the camera to it, and read its name, group, description and specs in the side panel.
-- Switch the headlights and taillights on, and start the engine for its idle sound and a subtle shake; hold Space to rev it.
+- Switch the headlights and taillights on, and start the engine: the solenoid clunks, the starter cranks, the V8 catches with a flare and settles into a lumpy idle, shaking the engine bay as it does; hold Space to rev it, and it winds down with a couple of pops when you switch it off.
 - Toggle the turntable's rotation and read the car's history in the About panel.
 
 ## Keyboard
@@ -38,7 +38,7 @@ There is no game and no scoring: it is a car to look at and take apart.
 | `P` | Next paint |
 | `M` | Mute |
 | `?` or `I` | About |
-| `Escape` | Close About, else deselect the part, else open the menu |
+| `Escape` | Close About, else deselect the part |
 
 Keys are ignored while an input or select element has focus.
 
@@ -48,9 +48,9 @@ The showroom models a 1969 Ford Mustang SportsRoof (fastback) from its published
 
 ## Tech stack
 
-- React 19 and TypeScript (strict) for the menu, toolbar, parts and info panels
+- React 19 and TypeScript (strict) for the toolbar, parts, info and about panels
 - Plain three.js for the showroom, the car and every material: physically based paint with clearcoat, chrome, glass and a reflective floor, lit by long soft light panels and bloom on the fixtures
-- Everything built in code, no model or audio files: the car's geometry is generated from named dimensions, and the engine, latch, explode and light sounds are synthesised with Web Audio at runtime
+- Everything built in code, no model or audio files: the car's geometry is generated from named dimensions, the V8 is rendered at start-up as looping exhaust-pulse waveforms (a cross-plane firing order through two pipe resonators) that are crossfaded and pitch-shifted to follow an rpm model, and the latch, explode and light sounds are synthesised with Web Audio
 - Vite for building and development
 - Node's built-in test runner (`node:test`), no separate test framework
 - No backend — paint choice, mute and turntable settings live in `localStorage`
@@ -63,8 +63,9 @@ The car's data and maths are kept separate from rendering, so the parts catalogu
 ```text
 src/car/     the parts catalogue, dimensions, paint rack, facts and the explode/hinge maths — framework-free, no three.js, no DOM
 src/render/  the three.js engine and its public API, the car builders (body, trim, wheels, chassis, engine bay, interior), materials, assembly and the showroom
-src/audio.ts synthesised engine, latch, explode and light sounds
-src/ui/      React components for the menu, toolbar, parts panel, info panel, about panel, and settings storage
+src/audio.ts the Web Audio engine (starter, catch, idle, rev and shutdown) and the latch, explode and light sounds
+src/engineSound.ts offline synthesis of the V8 loops and the starter, pure maths with unit tests
+src/ui/      React components for the toolbar, parts panel, info panel, about panel, and settings storage
 src/App.tsx  application state and wiring; src/main.tsx is the entry point
 ```
 
@@ -76,7 +77,7 @@ Requires Node >= 22.12.
 | --- | --- |
 | `npm install` | Install dependencies |
 | `npm run dev` | Start the dev server |
-| `npm test` | Run the car data, dimensions and explode-maths tests |
+| `npm test` | Run the car data, dimensions, explode-maths, UI and engine-sound tests |
 | `npm run build` | Type-check and build for production |
 | `npm run preview` | Preview the production build locally |
 
