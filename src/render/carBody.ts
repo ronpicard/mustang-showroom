@@ -31,6 +31,7 @@ import {
   REAR_AXLE_Z,
   REAR_GLASS_BASE_HALF_WIDTH,
   REAR_GLASS_BASE_Z,
+  ROCKER_BOTTOM_Y,
   ROCKER_TOP_Y,
   ROOF_FRONT_Z,
   ROOF_HALF_WIDTH,
@@ -288,14 +289,16 @@ function boundaryMoulding(rows: readonly (readonly THREE.Vector3[])[]): THREE.Bu
 /**
  * A flat, arch-shaped patch of dark inner-fender panel behind the wheel opening. Built as a
  * masked grid (not `THREE.CircleGeometry`) because the arch's full circle — centre
- * `WHEEL_ARCH_CENTER_Y`, radius `WHEEL_ARCH_RADIUS` — dips below the ground on this car, and only
- * the portion above y=0 is ever visible or should exist.
+ * `WHEEL_ARCH_CENTER_Y`, radius `WHEEL_ARCH_RADIUS` — dips below the ground on this car. It stops
+ * at the rocker's bottom edge like the real inner fender: any lower and it hangs beneath the
+ * sill as a dark wall that shows ahead of and behind the tyre from a low camera, flickering in
+ * and out as the turntable turns its single face toward and away from the viewer.
  */
 function wheelhouseGeometry(side: Side, axleZ: number, panelX: number): THREE.BufferGeometry {
   const r = WHEEL_ARCH_RADIUS + 1.5
   const ZSEG = 16
   const YSEG = 16
-  const yLow = Math.max(0.1, WHEEL_ARCH_CENTER_Y - r)
+  const yLow = Math.max(ROCKER_BOTTOM_Y, WHEEL_ARCH_CENTER_Y - r)
   const yHigh = WHEEL_ARCH_CENTER_Y + r
   const rows: THREE.Vector3[][] = []
   for (let i = 0; i <= ZSEG; i++) {

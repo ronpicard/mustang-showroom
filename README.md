@@ -78,7 +78,7 @@ Requires Node >= 22.12.
 | --- | --- |
 | `npm install` | Install dependencies |
 | `npm run dev` | Start the dev server |
-| `npm test` | Run the car data, dimensions, explode-maths, UI and engine-sound tests |
+| `npm test` | Run the car data, dimensions, explode-maths, car-body, UI and engine-sound tests |
 | `npm run build` | Type-check and build for production |
 | `npm run preview` | Preview the production build locally |
 
