@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="14" fill="#0a0a0c" />
+  <path
+    d="M8 44
+       L8 41.5
+       Q8 39.5 10 38.5
+       L13.5 37.5
+       Q15.5 32 20 30
+       L26 29
+       Q28.5 23.5 32.5 20.5
+       Q36.5 18 41 18
+       Q45 18 47 21
+       L49.5 27
+       Q54 28 56 32
+       Q57 35 57 38
+       L57 44
+       Z"
+    fill="#efe9df"
+  />
+  <circle cx="18.5" cy="44" r="6" fill="#0a0a0c" />
+  <circle cx="18.5" cy="44" r="3" fill="#efe9df" opacity="0.35" />
+  <circle cx="47.5" cy="44" r="6" fill="#0a0a0c" />
+  <circle cx="47.5" cy="44" r="3" fill="#efe9df" opacity="0.35" />
+  <rect x="8" y="52" width="49" height="3" rx="1.5" fill="#3d7bff" />
+</svg>
