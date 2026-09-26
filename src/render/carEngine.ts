@@ -12,6 +12,7 @@ import {
   ENGINE_BLOCK_HEIGHT,
   ENGINE_BLOCK_LENGTH,
   ENGINE_BLOCK_WIDTH,
+  ROCKER_BOTTOM_Y,
   ENGINE_CENTER,
   FAN_DIAMETER,
   FAN_Y,
@@ -47,6 +48,9 @@ const BLOCK_LOWER_FRACTION = 0.55
 const BLOCK_VALLEY_FRACTION = 0.35
 
 const BLOCK_BOTTOM_Y = ENGINE_CENTER[1] - ENGINE_BLOCK_HEIGHT / 2
+/** The sump hangs from the crankcase down to the sheet-metal line; any deeper and it shows
+ * beneath the front valance from a low camera. */
+const OIL_PAN_DEPTH = BLOCK_BOTTOM_Y - ROCKER_BOTTOM_Y
 const BLOCK_LOWER_HEIGHT = ENGINE_BLOCK_HEIGHT * BLOCK_LOWER_FRACTION
 const BLOCK_VEE_HEIGHT = ENGINE_BLOCK_HEIGHT - BLOCK_LOWER_HEIGHT
 const BLOCK_DECK_OUTER_Y = BLOCK_BOTTOM_Y + ENGINE_BLOCK_HEIGHT
@@ -161,8 +165,8 @@ function buildEngineBlock(materials: CarMaterials): THREE.Group {
   )
   group.add(makeMesh(deckGeometry, materials.castIron))
 
-  const oilPan = makeMesh(new RoundedBoxGeometry(16, 6, 26, 1, 1), materials.steelDark)
-  oilPan.position.set(ENGINE_CENTER[0], ENGINE_CENTER[1] - ENGINE_BLOCK_HEIGHT / 2 - 3, ENGINE_CENTER[2])
+  const oilPan = makeMesh(new RoundedBoxGeometry(16, OIL_PAN_DEPTH, 26, 1, 1), materials.steelDark)
+  oilPan.position.set(ENGINE_CENTER[0], BLOCK_BOTTOM_Y - OIL_PAN_DEPTH / 2, ENGINE_CENTER[2])
   group.add(oilPan)
 
   const frontZ = ENGINE_CENTER[2] + ENGINE_BLOCK_LENGTH / 2

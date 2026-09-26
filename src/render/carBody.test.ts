@@ -43,3 +43,14 @@ test('the front valance carries a turn-signal lens over each cut-out', () => {
   }
   assembly.dispose()
 })
+
+test('the engine block and sump stay above the rocker line', () => {
+  const assembly = createCarAssembly()
+  assembly.group.updateMatrixWorld(true)
+  const box = new THREE.Box3()
+  for (const object of assembly.partObjects('engineBlock')) {
+    box.setFromObject(object)
+    assert.ok(box.min.y >= ROCKER_BOTTOM_Y - 0.01, `engine block reaches down to y=${box.min.y.toFixed(2)}`)
+  }
+  assembly.dispose()
+})

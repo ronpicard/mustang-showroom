@@ -141,6 +141,8 @@ const PRESET_VIEWS: Record<Exclude<CameraPreset, 'showcase'>, PresetView> = {
  * so the fit has to hold at every angle, not just the one the camera was placed at.
  */
 const CAR_FIT_SWEEP_STEPS = 24
+/** Showcase refits caused by inset changes this soon after boot snap rather than tween. */
+const BOOT_SNAP_MS = 1500
 const CAR_FIT_CORNERS: readonly Vec3[] = (() => {
   const corners: Vec3[] = []
   for (let step = 0; step < CAR_FIT_SWEEP_STEPS; step++) {
@@ -522,6 +524,7 @@ export function createEngine(canvas: HTMLCanvasElement, events: EngineEvents): E
   let lastAppliedPreset: CameraPreset = 'showcase'
   /** The very first placement snaps instead of tweening in from the camera's default (0,0,0). */
   let cameraPlaced = false
+  const createdAt = performance.now()
 
   function beginTween(eye: THREE.Vector3, target: THREE.Vector3, onDone: () => void): void {
     if (!cameraPlaced) {
@@ -699,7 +702,12 @@ export function createEngine(canvas: HTMLCanvasElement, events: EngineEvents): E
     applyViewOffset()
     // The showcase fit depends on the free rect, so a panel opening or closing re-fits the car
     // (a short tween); fixed presets and the user's own orbit only get the offset shift above.
-    if (changed && currentPreset === 'showcase') applyPreset('showcase')
+    // The UI reports its first insets just after boot, when the car has already been fitted to the
+    // bare viewport: that refit snaps, or the opening frames dolly in from low under the nose.
+    if (changed && currentPreset === 'showcase') {
+      if (performance.now() - createdAt < BOOT_SNAP_MS) cameraPlaced = false
+      applyPreset('showcase')
+    }
   }
 
   function setPausedState(next: boolean): void {
