@@ -616,7 +616,8 @@ export function createEngine(canvas: HTMLCanvasElement, events: EngineEvents): E
   let headlightsOn = false
   let engineRunning = false
   /** `elapsedTime` when the engine last started or stopped, for the start-up and shutdown shudders. */
-  let engineToggledAt = 0
+  /** Starts long enough ago that the engine-off shudder has already died away at boot. */
+  let engineToggledAt = -ENGINE_SHAKE_STOP_SECONDS
   let turntableOn = true
   let paused = false
   let selectedId: PartId | null = null

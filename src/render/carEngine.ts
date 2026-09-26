@@ -434,6 +434,9 @@ function buildRadiator(materials: CarMaterials): THREE.Group {
   return group
 }
 
+/** The child of the fan part that turns about the fan's axis; `carAssembly` spins it by name. */
+export const FAN_SPINNER_NAME = 'fanSpinner'
+
 function buildFan(materials: CarMaterials): THREE.Group {
   const group = new THREE.Group()
   const hubRadius = 2
@@ -446,10 +449,14 @@ function buildFan(materials: CarMaterials): THREE.Group {
   clutch.position.set(0, FAN_Y, FAN_Z)
   group.add(clutch)
 
+  // The hub and blades sit in their own group at the hub's centre so the assembly can spin them
+  // about the fan's axis; spinning the whole part would swing it around the car's origin.
   const hubZ = FAN_Z + 2.2
+  const spinner = new THREE.Group()
+  spinner.name = FAN_SPINNER_NAME
+  spinner.position.set(0, FAN_Y, hubZ)
   const hub = makeMesh(cylinderAlongZ(hubRadius, hubRadius, 1.5, 20), materials.steelDark)
-  hub.position.set(0, FAN_Y, hubZ)
-  group.add(hub)
+  spinner.add(hub)
 
   const bladeTemplate = new THREE.BoxGeometry(bladeLength, 2.6, 0.15)
   bladeTemplate.translate(bladeLength / 2 + hubRadius, 0, 0)
@@ -458,11 +465,12 @@ function buildFan(materials: CarMaterials): THREE.Group {
   for (let i = 0; i < bladeCount; i++) {
     const angle = (i / bladeCount) * Math.PI * 2
     bladePlacements.push({
-      position: new THREE.Vector3(0, FAN_Y, hubZ),
+      position: new THREE.Vector3(0, 0, 0),
       rotation: new THREE.Euler(0, 0, angle),
     })
   }
-  group.add(makeMesh(mergedFrom(bladeTemplate, bladePlacements), materials.steelDark))
+  spinner.add(makeMesh(mergedFrom(bladeTemplate, bladePlacements), materials.steelDark))
+  group.add(spinner)
 
   // Belt drive at the engine's front face: crank, water pump and alternator pulleys and the belt.
   const crankPulley = new THREE.Vector3(0, ENGINE_CENTER[1] - 1, FAN_Z + 3.6)

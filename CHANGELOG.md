@@ -17,6 +17,7 @@ All notable changes to Mustang Showroom are documented in this file, following t
 - The dark inner-fender panels behind the wheels stopped at the platform instead of the sill, so from a low angle they hung beneath the nose and tail and flickered as the turntable turned. They now end at the rocker line.
 - The front valance's turn-signal cut-outs were open holes onto the suspension, which read as a dark shape jittering at the car's front corners as it turned. They now carry amber lenses in chrome bezels.
 - On load the camera no longer dollies up from beneath the nose: the car is fitted to the bare viewport before the toolbars and panels report their size, and that first refit now snaps into place. The oil pan also no longer hangs below the valance line, so nothing dark shows under the front from a low angle.
+- The radiator fan spun around the car's origin instead of its own hub, so while the engine cranked, caught or shut down (and for the first second after loading) the fan and belt drive whirled out through the front of the body as a dark shape at the front corners. It now turns in place on its hub, its speed follows the engine smoothly, and nothing shakes on load.
 
 ### Removed
 

@@ -9,7 +9,7 @@ import { buildBody } from './carBody.ts'
 import { buildTrim } from './carTrim.ts'
 import { buildWheels } from './carWheels.ts'
 import { buildChassis } from './carChassis.ts'
-import { buildEngineBay } from './carEngine.ts'
+import { buildEngineBay, FAN_SPINNER_NAME } from './carEngine.ts'
 import { buildInterior } from './carInterior.ts'
 
 /**
@@ -71,6 +71,8 @@ const ENGINE_SHAKE_PART_PHASE_STEP = 0.9
 const TWO_PI = Math.PI * 2
 /** The fan spins about its own axis at this many radians per second at full shake amount. */
 const FAN_SPIN_RATE = 20
+/** Frame gaps longer than this (a background tab) advance the fan by this much at most. */
+const FAN_MAX_STEP_SECONDS = 0.1
 
 interface PartRuntime {
   explode: ExplodeMove
@@ -247,6 +249,9 @@ export function createCarAssembly(): CarAssembly {
     }
   }
 
+  let fanAngle = 0
+  let fanLastElapsed: number | null = null
+
   function setEngineShake(amount: number, elapsed: number): void {
     ENGINE_SHAKE_PART_IDS.forEach((id, partIndex) => {
       const runtime = runtimes.get(id)
@@ -263,9 +268,13 @@ export function createCarAssembly(): CarAssembly {
       })
     })
 
-    const fanRuntime = runtimes.get('fan')
-    const fanObject = fanRuntime?.objects[0]
-    if (fanObject) fanObject.rotation.z = (FAN_SPIN_RATE * amount * elapsed) % TWO_PI
+    // Integrate the fan's angle so a changing shake amount speeds it up or slows it down rather
+    // than throwing the blades to a new angle every frame.
+    const dt = fanLastElapsed === null ? 0 : Math.min(FAN_MAX_STEP_SECONDS, Math.max(0, elapsed - fanLastElapsed))
+    fanLastElapsed = elapsed
+    fanAngle = (fanAngle + FAN_SPIN_RATE * amount * dt) % TWO_PI
+    const spinner = runtimes.get('fan')?.objects[0]?.getObjectByName(FAN_SPINNER_NAME)
+    if (spinner) spinner.rotation.z = fanAngle
   }
 
   function dispose(): void {
