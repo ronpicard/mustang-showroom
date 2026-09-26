@@ -15,8 +15,9 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 
 import type { CameraPreset, HingedPartId, PaintId, PartId, Vec3 } from '../car/types.ts'
 import { HINGED_PARTS } from '../car/types.ts'
-import { partById } from '../car/parts.ts'
+import { PART_IDS, partById } from '../car/parts.ts'
 import { paintById } from '../car/paints.ts'
+import { partEmphasisFor, type PartEmphasis } from './partEmphasis.ts'
 import { approach, clamp01, easeInOut } from '../car/explode.ts'
 import {
   BUMPER_HALF_WIDTH,
@@ -182,6 +183,8 @@ const HIGHLIGHT_CONFIG: Record<HighlightKind, { color: number; intensity: number
   hover: { color: 0x2f5aa8, intensity: 0.15 },
   selected: { color: 0xffb35c, intensity: 0.2 },
 }
+/** While a part is selected, every other part is drawn this faint so the selection stands out. */
+const GHOST_OPACITY = 0.07
 
 // -------------------------------------------------------------------------------------------
 // Headlights and taillights
@@ -330,48 +333,67 @@ export function createEngine(canvas: HTMLCanvasElement, events: EngineEvents): E
     taillightRight,
   )
 
-  // --- Highlights: cached per (material, kind), never mutating the shared car materials --------
+  // --- Emphasis: highlight and ghost variants cached per (material, kind), never mutating the
+  // shared car materials. Which variant a part wears follows `partEmphasisFor`.
 
-  const highlightCache = new Map<string, THREE.Material>()
+  const variantCache = new Map<string, { source: THREE.Material; variant: THREE.MeshStandardMaterial }>()
   const originalMaterials = new WeakMap<THREE.Mesh, THREE.Material | THREE.Material[]>()
 
-  function highlightVariantOf(material: THREE.Material, kind: HighlightKind): THREE.Material {
+  function variantOf(material: THREE.Material, kind: NonNullable<PartEmphasis>): THREE.Material {
     const key = `${material.uuid}:${kind}`
-    const cached = highlightCache.get(key)
-    if (cached) return cached
+    const cached = variantCache.get(key)
+    if (cached) return cached.variant
     const variant = material.clone() as THREE.MeshStandardMaterial
-    const config = HIGHLIGHT_CONFIG[kind]
-    variant.emissive.set(config.color)
-    variant.emissiveIntensity = config.intensity
-    variant.emissiveMap = null
-    highlightCache.set(key, variant)
+    if (kind === 'ghost') {
+      variant.transparent = true
+      variant.opacity = Math.min(material.opacity, GHOST_OPACITY)
+      variant.depthWrite = false
+      variant.emissiveIntensity = 0
+    } else {
+      const config = HIGHLIGHT_CONFIG[kind]
+      variant.emissive.set(config.color)
+      variant.emissiveIntensity = config.intensity
+      variant.emissiveMap = null
+    }
+    variantCache.set(key, { source: material, variant })
     return variant
   }
 
-  function highlightMaterialFor(
+  function variantsFor(
     material: THREE.Material | THREE.Material[],
-    kind: HighlightKind,
+    kind: NonNullable<PartEmphasis>,
   ): THREE.Material | THREE.Material[] {
-    if (Array.isArray(material)) return material.map((entry) => highlightVariantOf(entry, kind))
-    return highlightVariantOf(material, kind)
+    if (Array.isArray(material)) return material.map((entry) => variantOf(entry, kind))
+    return variantOf(material, kind)
   }
 
-  function applyHighlight(id: PartId, kind: HighlightKind): void {
+  /** Dresses `id`'s meshes for the current selection and hover. */
+  function refreshPartEmphasis(id: PartId): void {
+    const kind = partEmphasisFor(id, selectedId, hoveredId)
     assembly.forEachMesh(id, (mesh) => {
       let original = originalMaterials.get(mesh)
       if (!original) {
         original = mesh.material
         originalMaterials.set(mesh, original)
       }
-      mesh.material = highlightMaterialFor(original, kind)
+      mesh.material = kind === null ? original : variantsFor(original, kind)
     })
   }
 
-  function clearHighlight(id: PartId): void {
-    assembly.forEachMesh(id, (mesh) => {
-      const original = originalMaterials.get(mesh)
-      if (original) mesh.material = original
-    })
+  function refreshAllPartEmphasis(): void {
+    for (const id of PART_IDS) refreshPartEmphasis(id)
+  }
+
+  /** The paint changed on the shared material; the variants cloned from it follow. */
+  function refreshPaintVariants(): void {
+    const paint = assembly.materials.paint
+    for (const { source, variant } of variantCache.values()) {
+      if (source !== paint) continue
+      variant.color.copy(paint.color)
+      variant.metalness = paint.metalness
+      variant.roughness = paint.roughness
+      variant.needsUpdate = true
+    }
   }
 
   // --- Camera fit and preset tweening -----------------------------------------------------------
@@ -627,6 +649,7 @@ export function createEngine(canvas: HTMLCanvasElement, events: EngineEvents): E
 
   function setPaint(id: PaintId): void {
     assembly.materials.setPaint(paintById(id))
+    refreshPaintVariants()
   }
 
   function setExplode(amount: number): void {
@@ -648,13 +671,9 @@ export function createEngine(canvas: HTMLCanvasElement, events: EngineEvents): E
 
   function setSelected(id: PartId | null): void {
     if (id === selectedId) return
-    const previous = selectedId
     selectedId = id
-    if (previous !== null) {
-      if (previous === hoveredId) applyHighlight(previous, 'hover')
-      else clearHighlight(previous)
-    }
-    if (selectedId !== null) applyHighlight(selectedId, 'selected')
+    // Selecting ghosts the rest of the car and deselecting restores it, so every part is redressed.
+    refreshAllPartEmphasis()
   }
 
   function setTurntable(on: boolean): void {
@@ -736,9 +755,10 @@ export function createEngine(canvas: HTMLCanvasElement, events: EngineEvents): E
 
   function updateHover(id: PartId | null): void {
     if (id === hoveredId) return
-    if (hoveredId !== null && hoveredId !== selectedId) clearHighlight(hoveredId)
+    const previous = hoveredId
     hoveredId = id
-    if (hoveredId !== null && hoveredId !== selectedId) applyHighlight(hoveredId, 'hover')
+    if (previous !== null) refreshPartEmphasis(previous)
+    if (hoveredId !== null) refreshPartEmphasis(hoveredId)
     canvas.style.cursor = hoveredId ? 'pointer' : ''
     events.onHover(hoveredId)
   }
@@ -937,8 +957,8 @@ export function createEngine(canvas: HTMLCanvasElement, events: EngineEvents): E
 
       controls.dispose()
 
-      for (const material of highlightCache.values()) material.dispose()
-      highlightCache.clear()
+      for (const { variant } of variantCache.values()) variant.dispose()
+      variantCache.clear()
 
       assembly.dispose()
       showroom.dispose()

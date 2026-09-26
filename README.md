@@ -1,6 +1,6 @@
 # Mustang Showroom
 
-Mustang Showroom is a 1969 Ford Mustang SportsRoof — a Mach 1 dressed in the John Wick "Boss 429" look — standing under its own spotlights on a turntable in a dark, polished dealership at night. It opens straight into the showroom: orbit the car, change the paint, open the hood, doors and trunk, drag the explode slider to pull it apart into its parts, click any part to read about it, switch on the headlights, and start the engine. Play the [live demo](https://ronpicard.github.io/mustang-showroom/) — it works on both phones and desktops.
+Mustang Showroom is a 1969 Ford Mustang SportsRoof — a Mach 1 dressed in the John Wick "Boss 429" look — standing under its own spotlights on a turntable in a dark, polished dealership at night. It opens straight into the showroom: orbit the car, change the paint, open the hood, doors and trunk, drag the explode slider to pull it apart into its parts, click any part to read about it while the rest of the car turns glass-clear around it, switch on the headlights, and start the engine. Play the [live demo](https://ronpicard.github.io/mustang-showroom/) — it works on both phones and desktops.
 
 There is no game and no scoring: it is a car to look at and take apart.
 
