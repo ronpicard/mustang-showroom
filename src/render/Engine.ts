@@ -260,6 +260,7 @@ export function createEngine(canvas: HTMLCanvasElement, events: EngineEvents): E
   const assembly = createCarAssembly()
   assembly.group.position.set(0, TURNTABLE_HEIGHT, 0)
   showroom.turntable.add(assembly.group)
+  showroom.hideFromReflections(assembly.group)
 
   // --- Camera and controls ---------------------------------------------------------------------
 

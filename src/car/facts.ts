@@ -97,7 +97,7 @@ export const FACT_SECTIONS: readonly FactSection[] = [
     id: 'about',
     title: 'About this showroom',
     paragraphs: [
-      'Everything here is built from code: the car is modelled from published dimensions with three.js geometry rather than a downloaded 3D model, the paint, chrome and glass are physically based materials lit by the room itself, and the engine sound is synthesised. Drag to orbit, scroll or pinch to zoom, and click any part of the car to read about it. The explode slider pulls the car apart in the order a workshop would.',
+      'Everything here is built from code: the car is modelled from published dimensions with three.js geometry rather than a downloaded 3D model, the paint, chrome and glass are physically based materials lit by the room itself, and the engine is built from field recordings of real V8s (credited under Controls), pitch-shifted to follow a modelled rev range, with a synthesised V8 standing in if they fail to load. Drag to orbit, scroll or pinch to zoom, and click any part of the car to read about it. The explode slider pulls the car apart in the order a workshop would.',
     ],
   },
 ]

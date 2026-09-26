@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { loopWeightsForRpm } from './audio.ts'
+import { loopWeightsForRpm, recordedRateForRpm } from './audio.ts'
 
 const LOOPS = [800, 1500, 2700, 4600]
 
@@ -19,4 +19,12 @@ test('loop weights crossfade between neighbours with equal power', () => {
   }
   const [a, b] = loopWeightsForRpm(Math.sqrt(800 * 1500), LOOPS)
   assert.equal(Math.abs(a! - b!) < 1e-9, true, 'the geometric midpoint is an even blend')
+})
+
+test('the recorded loop slows in proportion below idle and caps its pitch shift at redline', () => {
+  assert.equal(recordedRateForRpm(800), 1)
+  assert.equal(Math.abs(recordedRateForRpm(400) - 0.5) < 1e-9, true)
+  assert.equal(recordedRateForRpm(0) > 0, true)
+  assert.equal(recordedRateForRpm(5400) < 2.5, true)
+  assert.equal(recordedRateForRpm(3000) > 1 && recordedRateForRpm(3000) < recordedRateForRpm(5400), true)
 })

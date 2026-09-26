@@ -9,6 +9,11 @@ All notable changes to Mustang Showroom are documented in this file, following t
 - The car is lit by its own three-spot rig (key, fill and rim) so it reads brightly from every angle while the showroom around it stays dark, and a soft contact shadow grounds it on the turntable.
 - The engine sounds like a V8: a solenoid clunk, a labouring starter crank, the catch with a burst of pops and an rpm flare that settles into a lumpy idle, a rev that climbs through the rev range, and a shutdown that winds down with two pops. The engine bay lurches while cranking, shudders on the catch and settles into its running rattle in time with the sound.
 - Smoother edges: the render passes are multisampled.
+- The engine now plays real V8 recordings: a crank-and-catch start, a seamless idle loop that pitch-shifts through the rev range, a throttle blip on each rev and a 1969 Mustang 302 layered on hard revs (credits under Controls in the About panel and in the README). The synthesised V8 stays as the fallback if the recordings fail to load.
+
+### Fixed
+
+- The floor no longer mirrors the car's chrome edges as flickering scribbles in front of the turntable; the car is left out of the floor's reflection pass, and the contact shadow sits clear of the platform.
 
 ### Removed
 

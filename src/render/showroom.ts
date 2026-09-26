@@ -34,6 +34,12 @@ export interface Showroom {
   environmentGroup: THREE.Group
   /** Swaps the Reflector floor for a plain dark floor (low quality). */
   setReflections(on: boolean): void
+  /**
+   * Leaves `object` out of the floor's mirror pass. The car sits on the platform, so its only
+   * visible reflection would be its bright chrome edges scribbled across the floor beyond the
+   * turntable's rim, which reads as a glitch that turns with the turntable.
+   */
+  hideFromReflections(object: THREE.Object3D): void
   /** Subtle animation: nothing moves much; pulses the marquee slightly. */
   update(dt: number, elapsed: number): void
   dispose(): void
@@ -184,7 +190,7 @@ const TURNTABLE_EDGE_HEIGHT = 0.6
 const CONTACT_SHADOW_LENGTH = 205
 const CONTACT_SHADOW_WIDTH = 92
 const CONTACT_SHADOW_OPACITY = 0.7
-const CONTACT_SHADOW_LIFT = 0.08
+const CONTACT_SHADOW_LIFT = 0.35
 const CONTACT_SHADOW_TEXTURE_SIZE = 256
 
 const LED_RING_RADIUS = TURNTABLE_RADIUS - 3
@@ -296,6 +302,7 @@ function makeFloorTexture(): THREE.CanvasTexture {
 interface FloorBuild {
   group: THREE.Group
   setReflections(on: boolean): void
+  hideFromReflections(object: THREE.Object3D): void
   dispose(): void
 }
 
@@ -312,6 +319,20 @@ function buildFloor(): FloorBuild {
   })
   reflector.rotation.x = -Math.PI / 2
   reflector.position.y = 0
+  // The Reflector renders the scene from its mirrored camera inside its own onBeforeRender;
+  // hiding these objects around that call keeps them out of the mirror only. The main pass has
+  // already collected its render list by then, so they still draw normally.
+  const hiddenFromReflection: THREE.Object3D[] = []
+  const renderReflection = reflector.onBeforeRender
+  reflector.onBeforeRender = function (this: THREE.Mesh, ...args: Parameters<THREE.Mesh['onBeforeRender']>) {
+    const shown = hiddenFromReflection.filter((object) => object.visible)
+    for (const object of shown) object.visible = false
+    try {
+      renderReflection.apply(this, args)
+    } finally {
+      for (const object of shown) object.visible = true
+    }
+  }
 
   const overlayGeometry = new THREE.PlaneGeometry(ROOM_SIZE, ROOM_SIZE)
   const floorTexture = makeFloorTexture()
@@ -345,6 +366,9 @@ function buildFloor(): FloorBuild {
   return {
     group,
     setReflections,
+    hideFromReflections(object: THREE.Object3D) {
+      if (!hiddenFromReflection.includes(object)) hiddenFromReflection.push(object)
+    },
     dispose() {
       reflectorGeometry.dispose()
       reflector.dispose()
@@ -959,6 +983,9 @@ export function createShowroom(): Showroom {
     environmentGroup,
     setReflections(on: boolean): void {
       floor.setReflections(on)
+    },
+    hideFromReflections(object: THREE.Object3D) {
+      floor.hideFromReflections(object)
     },
     update(dt: number, elapsed: number): void {
       elapsedTotal = elapsed

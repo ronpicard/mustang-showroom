@@ -1,8 +1,9 @@
 /**
- * Synthesised Mustang Showroom sound effects and the V8, entirely Web Audio, no asset files.
- * The engine plays pre-rendered loops from `engineSound.ts` at a few fixed speeds, crossfaded
- * and pitch-shifted to follow an rpm model that the start (solenoid, crank, catch, flare), the
- * throttle and the shutdown all drive.
+ * Mustang Showroom sound: Web Audio effects plus the V8. The engine prefers the field recordings
+ * under `public/sounds/` (a crank-and-catch start clip, a seamless idle loop and two rev blips,
+ * see the README's sound credits) and pitch-shifts the loop to follow an rpm model that the
+ * start, the throttle and the shutdown all drive. If the recordings have not loaded, or fail to,
+ * the same model drives loops synthesised by `engineSound.ts` instead.
  */
 
 import type { SoundName } from './car/types.ts'
@@ -133,6 +134,35 @@ const STOP_SHUDDER_RPM = 70
 const STOP_SHUDDER_HZ = 6
 const STOP_POP_COUNT = 2
 const STOP_POP_PEAK = 0.18
+// --- Recorded engine ---------------------------------------------------------------------------
+
+/** Clips under `public/sounds/`, relative to the page; cut from CC-licensed recordings (see README). */
+const RECORDED_CLIP_PATHS = {
+  /** Solenoid, crank and catch; the engine fires `STARTER_CRANK_SECONDS` in, then idles on for the handover. */
+  start: 'sounds/engine-start.wav',
+  /** A seamless idle loop at about `IDLE_RPM`. */
+  idle: 'sounds/engine-idle.wav',
+  /** A throttle blip from the same engine as the idle. */
+  rev: 'sounds/engine-rev.wav',
+  /** A 1969 Mustang 302 blipping, layered on top of hard revs. */
+  mustangRev: 'sounds/mustang-rev.wav',
+} as const
+type ClipName = keyof typeof RECORDED_CLIP_PATHS
+const CLIP_NAMES = Object.keys(RECORDED_CLIP_PATHS) as ClipName[]
+const RECORDED_START_LEVEL = 0.55
+const RECORDED_IDLE_LEVEL = 0.34
+const RECORDED_REDLINE_LEVEL = 0.6
+/** The idle loop is pitch-shifted up to this rate at redline. */
+const RECORDED_MAX_RATE = 2.3
+/** After the catch the start clip fades out over this long while the loop takes over. */
+const RECORDED_START_TAIL_S = 0.9
+/** Throttle rising through this plays a rev blip, at most this often; hard revs add the Mustang. */
+const REV_BLIP_THROTTLE = 0.3
+const REV_BLIP_MIN_INTERVAL_S = 0.9
+const REV_BLIP_LEVEL = 0.5
+const REV_BLIP_MUSTANG_LEVEL = 0.35
+const REV_BLIP_MUSTANG_THROTTLE = 0.75
+
 /** The starter: its level, how it labours up to speed, and the zing as it disengages at the catch. */
 const STARTER_LEVEL = 0.26
 const STARTER_ATTACK_S = 0.05
@@ -312,6 +342,8 @@ function voiceLightsOff(context: AudioContext, out: GainNode, buffer: AudioBuffe
 
 /** The engine's live nodes, from the crank until the shutdown stalls. */
 interface EngineNodes {
+  /** True when `loops` is the single recorded idle loop rather than the synthesised set. */
+  recorded: boolean
   /** One looping source per rendered speed; the follower crossfades and pitch-shifts them. */
   loops: { rpm: number; source: AudioBufferSourceNode; gain: GainNode }[]
   /** Level for the whole engine; ramped by the catch, the throttle and the shutdown. */
@@ -323,6 +355,8 @@ interface EngineNodes {
 interface StarterNodes {
   source: AudioBufferSourceNode
   gain: GainNode
+  /** The recorded start clip fades out after the catch instead of zinging free. */
+  recorded: boolean
 }
 
 interface EngineBuffers {
@@ -339,7 +373,20 @@ const easeOut = (t: number): number => 1 - (1 - clamp01(t)) ** 3
 /** Normalised engine speed, 0 at idle and 1 at redline. */
 const speedForRpm = (rpm: number): number => clamp01((rpm - IDLE_RPM) / (REDLINE_RPM - IDLE_RPM))
 const rpmForThrottle = (amount: number): number => IDLE_RPM + (REDLINE_RPM - IDLE_RPM) * clamp01(amount) ** THROTTLE_CURVE
-const levelForRpm = (rpm: number): number => lerp(ENGINE_IDLE_LEVEL, ENGINE_REDLINE_LEVEL, Math.sqrt(speedForRpm(rpm)))
+const levelForRpm = (rpm: number, recorded: boolean): number =>
+  recorded
+    ? lerp(RECORDED_IDLE_LEVEL, RECORDED_REDLINE_LEVEL, Math.sqrt(speedForRpm(rpm)))
+    : lerp(ENGINE_IDLE_LEVEL, ENGINE_REDLINE_LEVEL, Math.sqrt(speedForRpm(rpm)))
+
+/**
+ * Playback rate of the recorded idle loop for `rpm`: below idle it slows in proportion (the
+ * catch and the stall), above idle it climbs to `RECORDED_MAX_RATE` at redline rather than the
+ * true ratio, which would be far too high a pitch shift for one sample.
+ */
+export function recordedRateForRpm(rpm: number): number {
+  if (rpm <= IDLE_RPM) return Math.max(0.05, rpm / IDLE_RPM)
+  return 1 + (RECORDED_MAX_RATE - 1) * speedForRpm(rpm)
+}
 
 /**
  * Equal-power crossfade weights over the rendered loops for `rpm`, interpolating in log-rpm so
@@ -379,6 +426,12 @@ export function createAudio(): ShowroomAudio {
   const lastPlayedAt = new Map<SoundName, number>()
 
   let engineBuffers: EngineBuffers | null = null
+  /** The recordings' bytes once fetched, decoded into `recordedClips` when a context exists. */
+  let clipBytes: Record<ClipName, ArrayBuffer> | null = null
+  let recordedClips: Record<ClipName, AudioBuffer> | null = null
+  let clipsDecoding = false
+  let lastRevBlipAt = -Infinity
+  let lastThrottle = 0
   let engine: EngineNodes | null = null
   let starter: StarterNodes | null = null
   let enginePhase: EnginePhase = 'stopped'
@@ -389,6 +442,46 @@ export function createAudio(): ShowroomAudio {
   let lastTickAt = 0
   let throttleTarget = 0
   let engineTicker: ReturnType<typeof setInterval> | null = null
+
+  /** Fetches the recordings once, in the background; any failure leaves the synthesised engine in charge. */
+  function preloadClips(): void {
+    if (typeof fetch !== 'function' || typeof document === 'undefined') return
+    const base = (import.meta as { env?: { BASE_URL?: string } }).env?.BASE_URL ?? './'
+    void Promise.all(
+      CLIP_NAMES.map(async (name) => {
+        const url = new URL(base + RECORDED_CLIP_PATHS[name], document.baseURI)
+        const response = await fetch(url)
+        if (!response.ok) throw new Error(`${url.pathname}: HTTP ${response.status}`)
+        return [name, await response.arrayBuffer()] as const
+      }),
+    ).then(
+      (entries) => {
+        clipBytes = Object.fromEntries(entries) as Record<ClipName, ArrayBuffer>
+        if (ctx) void decodeClips(ctx)
+      },
+      (error: unknown) => {
+        console.warn('Engine recordings unavailable, using the synthesised engine:', error)
+      },
+    )
+  }
+
+  /** Decodes the fetched recordings for `context`; the engine uses them from the next start. */
+  async function decodeClips(context: AudioContext): Promise<void> {
+    if (!clipBytes || recordedClips || clipsDecoding) return
+    clipsDecoding = true
+    try {
+      const decoded = await Promise.all(
+        CLIP_NAMES.map(async (name) => [name, await context.decodeAudioData(clipBytes![name].slice(0))] as const),
+      )
+      if (ctx === context) recordedClips = Object.fromEntries(decoded) as Record<ClipName, AudioBuffer>
+    } catch (error: unknown) {
+      console.warn('Engine recordings could not be decoded, using the synthesised engine:', error)
+    } finally {
+      clipsDecoding = false
+    }
+  }
+
+  preloadClips()
 
   function ensureContext(): boolean {
     if (ctx && master) return true
@@ -429,6 +522,7 @@ export function createAudio(): ShowroomAudio {
       if (!ensureContext() || !ctx) return
       if (ctx.state === 'suspended') void ctx.resume()
       unlocked = true
+      void decodeClips(ctx)
     } catch { /* no-op: audio is optional */ }
   }
 
@@ -479,7 +573,10 @@ export function createAudio(): ShowroomAudio {
   /** Builds and starts the looping engine sources, silent, so the follower can fade them in. */
   function ensureEngine(context: AudioContext, out: GainNode, now: number): EngineNodes {
     if (engine) return engine
-    const buffers = ensureEngineBuffers(context)
+    const clips = recordedClips
+    const loopBuffers = clips
+      ? [{ rpm: IDLE_RPM, buffer: clips.idle }]
+      : ensureEngineBuffers(context).loops
     const bus = context.createGain()
     bus.gain.value = 0
     const lowpass = context.createBiquadFilter()
@@ -492,7 +589,7 @@ export function createAudio(): ShowroomAudio {
     bus.connect(lowpass)
     lowpass.connect(compressor)
     compressor.connect(out)
-    const loops = buffers.loops.map(({ rpm, buffer }) => {
+    const loops = loopBuffers.map(({ rpm, buffer }) => {
       const source = context.createBufferSource()
       source.buffer = buffer
       source.loop = true
@@ -503,7 +600,7 @@ export function createAudio(): ShowroomAudio {
       source.start(now)
       return { rpm, source, gain }
     })
-    engine = { loops, bus, lowpass, compressor }
+    engine = { recorded: clips !== null, loops, bus, lowpass, compressor }
     return engine
   }
 
@@ -543,7 +640,8 @@ export function createAudio(): ShowroomAudio {
     const weights = loopWeightsForRpm(rpm, nodes.loops.map((loop) => loop.rpm))
     nodes.loops.forEach((loop, index) => {
       loop.gain.gain.setTargetAtTime(weights[index]!, now, ENGINE_TICK_SMOOTHING_S)
-      loop.source.playbackRate.setTargetAtTime(Math.max(0.05, rpm / loop.rpm), now, ENGINE_TICK_SMOOTHING_S)
+      const rate = nodes.recorded ? recordedRateForRpm(rpm) : Math.max(0.05, rpm / loop.rpm)
+      loop.source.playbackRate.setTargetAtTime(rate, now, ENGINE_TICK_SMOOTHING_S)
     })
     nodes.bus.gain.setTargetAtTime(level, now, ENGINE_TICK_SMOOTHING_S)
   }
@@ -572,7 +670,7 @@ export function createAudio(): ShowroomAudio {
         ? lerp(CATCH_START_RPM, CATCH_FLARE_RPM, easeOut(t / CATCH_RISE_S))
         : IDLE_RPM + (CATCH_FLARE_RPM - IDLE_RPM) * Math.exp(-(t - CATCH_RISE_S) / CATCH_FLARE_DECAY_S)
       const swell = clamp01(t / CATCH_SWELL_S)
-      applyEngineRpm(context, engine, engineRpm + lopeAt(now, engineRpm), levelForRpm(engineRpm) * swell)
+      applyEngineRpm(context, engine, engineRpm + lopeAt(now, engineRpm), levelForRpm(engineRpm, engine.recorded) * swell)
       if (t >= CATCH_FLARE_SECONDS) {
         enginePhase = 'running'
         phaseStartedAt = now
@@ -584,7 +682,9 @@ export function createAudio(): ShowroomAudio {
       const target = rpmForThrottle(throttleTarget)
       const timeConstant = target > engineRpm ? RPM_RISE_TIME_CONSTANT_S : RPM_FALL_TIME_CONSTANT_S
       engineRpm += (target - engineRpm) * (1 - Math.exp(-dt / timeConstant))
-      applyEngineRpm(context, engine, engineRpm + lopeAt(now, engineRpm), levelForRpm(engineRpm))
+      applyEngineRpm(context, engine, engineRpm + lopeAt(now, engineRpm), levelForRpm(engineRpm, engine.recorded))
+      if (engine.recorded && master) playRevBlip(context, master, now)
+      lastThrottle = throttleTarget
       return
     }
 
@@ -596,15 +696,51 @@ export function createAudio(): ShowroomAudio {
       }
       const dying = clamp01((engineRpm - STOP_STALL_RPM) / (IDLE_RPM - STOP_STALL_RPM))
       const shudder = STOP_SHUDDER_RPM * (1 - dying) * Math.sin(2 * Math.PI * STOP_SHUDDER_HZ * t)
-      applyEngineRpm(context, engine, engineRpm + shudder, levelForRpm(engineRpm) * Math.sqrt(dying))
+      applyEngineRpm(context, engine, engineRpm + shudder, levelForRpm(engineRpm, engine.recorded) * Math.sqrt(dying))
     }
   }
 
-  /** Lets the starter zing free and disengage, then removes its nodes. */
+  /** Plays one recorded clip once at `level`, cleaning up after itself. */
+  function playClip(context: AudioContext, out: GainNode, buffer: AudioBuffer, at: number, level: number): void {
+    const source = context.createBufferSource()
+    source.buffer = buffer
+    const gain = context.createGain()
+    gain.gain.value = level
+    source.connect(gain)
+    gain.connect(out)
+    source.start(at)
+    source.onended = () => {
+      source.disconnect()
+      gain.disconnect()
+    }
+  }
+
+  /** On the throttle rising through `REV_BLIP_THROTTLE`, a recorded blip; a hard rev adds the Mustang. */
+  function playRevBlip(context: AudioContext, out: GainNode, now: number): void {
+    if (!recordedClips) return
+    const rising = lastThrottle < REV_BLIP_THROTTLE && throttleTarget >= REV_BLIP_THROTTLE
+    if (!rising || now - lastRevBlipAt < REV_BLIP_MIN_INTERVAL_S) return
+    lastRevBlipAt = now
+    playClip(context, out, recordedClips.rev, now, REV_BLIP_LEVEL)
+    if (throttleTarget >= REV_BLIP_MUSTANG_THROTTLE) playClip(context, out, recordedClips.mustangRev, now + 0.05, REV_BLIP_MUSTANG_LEVEL)
+  }
+
+  /** Lets the starter zing free and disengage, then removes its nodes. The recorded start just fades. */
   function releaseStarter(now: number): void {
     if (!starter) return
     const nodes = starter
     starter = null
+    if (nodes.recorded) {
+      nodes.gain.gain.cancelScheduledValues(now)
+      nodes.gain.gain.setValueAtTime(Math.max(0.0001, nodes.gain.gain.value), now)
+      nodes.gain.gain.linearRampToValueAtTime(0.0001, now + RECORDED_START_TAIL_S)
+      nodes.source.stop(now + RECORDED_START_TAIL_S + 0.05)
+      nodes.source.onended = () => {
+        nodes.source.disconnect()
+        nodes.gain.disconnect()
+      }
+      return
+    }
     nodes.source.playbackRate.cancelScheduledValues(now)
     nodes.source.playbackRate.setValueAtTime(nodes.source.playbackRate.value, now)
     nodes.source.playbackRate.linearRampToValueAtTime(STARTER_DISENGAGE_RATE, now + STARTER_RELEASE_S)
@@ -636,12 +772,26 @@ export function createAudio(): ShowroomAudio {
   function startEngineAudio(context: AudioContext, out: GainNode, now: number, intensity: number): void {
     if (enginePhase !== 'stopped') return
     const amount = 0.6 + 0.4 * clamp01(intensity)
-    const buffers = ensureEngineBuffers(context)
     enginePhase = 'cranking'
     phaseStartedAt = now
     lastTickAt = now
     engineRpm = 0
+    lastThrottle = throttleTarget
 
+    if (recordedClips) {
+      const source = context.createBufferSource()
+      source.buffer = recordedClips.start
+      const gain = context.createGain()
+      gain.gain.value = RECORDED_START_LEVEL * amount
+      source.connect(gain)
+      gain.connect(out)
+      source.start(now)
+      starter = { source, gain, recorded: true }
+      startTicker()
+      return
+    }
+
+    const buffers = ensureEngineBuffers(context)
     const clunk = context.createBufferSource()
     clunk.buffer = buffers.solenoid
     const clunkGain = context.createGain()
@@ -665,7 +815,7 @@ export function createAudio(): ShowroomAudio {
     source.connect(gain)
     gain.connect(out)
     source.start(now + 0.06)
-    starter = { source, gain }
+    starter = { source, gain, recorded: false }
     startTicker()
   }
 
@@ -754,6 +904,8 @@ export function createAudio(): ShowroomAudio {
       engineRpm = 0
       throttleTarget = 0
       engineBuffers = null
+      recordedClips = null
+      clipsDecoding = false
       noiseBuffer = null
       ctx = null
       master = null

@@ -810,6 +810,17 @@ button {
   color: var(--color-text-dim);
 }
 
+.about-credits {
+  margin-top: 1rem;
+  font-size: 0.8rem;
+}
+
+.about-credits a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .about-table {
   margin-top: 4px;
 }

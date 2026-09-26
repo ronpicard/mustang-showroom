@@ -91,6 +91,21 @@ export default function AboutPanel({ onClose }: AboutPanelProps) {
                   </div>
                 ))}
               </dl>
+              <p className="about-paragraph about-credits">
+                Engine recordings: the start and blip are a Chevrolet 350 and a Studebaker V8 by{' '}
+                <a href="https://freesound.org/people/lonemonk/" target="_blank" rel="noreferrer">
+                  lonemonk
+                </a>{' '}
+                (
+                <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">
+                  CC BY 4.0
+                </a>
+                ), and the hard-rev layer is a 1969 Mustang 302 by{' '}
+                <a href="https://freesound.org/people/FlaxGod/sounds/653226/" target="_blank" rel="noreferrer">
+                  FlaxGod
+                </a>{' '}
+                (CC0), all from Freesound.
+              </p>
             </div>
           ) : (
           <div className="about-content">
