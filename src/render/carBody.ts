@@ -93,6 +93,13 @@ const MOULDING_WIDTH = 0.6
 const DRIP_RAIL_WIDTH = 0.5
 /** Radius of the rolled lip around each wheel arch opening. */
 const ARCH_LIP_TUBE_RADIUS = 0.6
+/** Turn-signal lamps in the front valance: lens proud of the panel (which curves away by up to 0.4 in
+ * across the lamp), backing recessed behind it. */
+/** The cut-out is masked per grid cell, so the bezel is wide enough to hide its stepped edge. */
+const TURN_SIGNAL_HOLE_RADIUS = 1.6
+const TURN_SIGNAL_LENS_STANDOFF = 0.5
+const TURN_SIGNAL_BACKING_INSET = 1
+const TURN_SIGNAL_BEZEL_WIDTH = 1.6
 
 // -------------------------------------------------------------------------------------------
 // Small shared helpers
@@ -630,7 +637,7 @@ function buildFrontValance(materials: CarMaterials): PartBuild {
     }
     rows.push(row)
   }
-  const holeR = 2.2
+  const holeR = TURN_SIGNAL_HOLE_RADIUS
   const geom = gridGeometry(
     rows,
     false,
@@ -638,8 +645,28 @@ function buildFrontValance(materials: CarMaterials): PartBuild {
       insideCircleXY(p, { x: TURN_SIGNAL_X, y: TURN_SIGNAL_Y, r: holeR }) ||
       insideCircleXY(p, { x: -TURN_SIGNAL_X, y: TURN_SIGNAL_Y, r: holeR }),
   )
+  // The turn signals that fill the cut-outs: a chrome bezel, an amber lens and a satin-black
+  // backing behind it, so the lens reads as a lamp instead of a window onto the suspension.
+  const uSignal = TURN_SIGNAL_X / halfWidth
+  const zSignal = NOSE_Z + PANEL_GAP - 2.4 * uSignal * uSignal
+  const signalParts: THREE.BufferGeometry[] = []
+  const backingParts: THREE.BufferGeometry[] = []
+  const bezelParts: THREE.BufferGeometry[] = []
+  for (const side of [1, -1] as const) {
+    const x = TURN_SIGNAL_X * side
+    signalParts.push(circlePatch(x, TURN_SIGNAL_Y, zSignal + TURN_SIGNAL_LENS_STANDOFF, holeR + 0.7, 1))
+    backingParts.push(circlePatch(x, TURN_SIGNAL_Y, zSignal - TURN_SIGNAL_BACKING_INSET, holeR + 1.8, 1))
+    const bezel = new THREE.RingGeometry(holeR + 0.6, holeR + TURN_SIGNAL_BEZEL_WIDTH, 24)
+    bezel.translate(x, TURN_SIGNAL_Y, zSignal + TURN_SIGNAL_LENS_STANDOFF + 0.05)
+    bezelParts.push(bezel)
+  }
   const g = new THREE.Group()
-  g.add(mesh(geom, materials.paint))
+  g.add(
+    mesh(geom, materials.paint),
+    mesh(mergeGeometries(backingParts), materials.satinBlack),
+    mesh(mergeGeometries(bezelParts), materials.chrome),
+    mesh(mergeGeometries(signalParts), materials.amberLens),
+  )
   g.name = 'frontValance'
   tagPart(g, 'frontValance')
   return { id: 'frontValance', objects: [g] }

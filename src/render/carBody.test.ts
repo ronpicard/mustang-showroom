@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import * as THREE from 'three'
-import { ROCKER_BOTTOM_Y } from '../car/dimensions.ts'
+import { ROCKER_BOTTOM_Y, TURN_SIGNAL_X, TURN_SIGNAL_Y } from '../car/dimensions.ts'
 import type { PartId } from '../car/types.ts'
 import { createCarAssembly } from './carAssembly.ts'
 
@@ -22,6 +22,24 @@ test('no fender or quarter panel geometry hangs below the rocker line', () => {
         )
       })
     }
+  }
+  assembly.dispose()
+})
+
+test('the front valance carries a turn-signal lens over each cut-out', () => {
+  const assembly = createCarAssembly()
+  assembly.group.updateMatrixWorld(true)
+  const box = new THREE.Box3()
+  const lensBoxes: THREE.Box3[] = []
+  for (const object of assembly.partObjects('frontValance')) {
+    object.traverse((child) => {
+      const m = child as THREE.Mesh
+      if (m.isMesh && m.material === assembly.materials.amberLens) lensBoxes.push(box.setFromObject(m).clone())
+    })
+  }
+  assert.equal(lensBoxes.length, 1)
+  for (const x of [TURN_SIGNAL_X, -TURN_SIGNAL_X]) {
+    assert.ok(lensBoxes[0]!.containsPoint(new THREE.Vector3(x, TURN_SIGNAL_Y, lensBoxes[0]!.max.z)), `no lens over the cut-out at x=${x}`)
   }
   assembly.dispose()
 })
