@@ -6,7 +6,7 @@ All notable changes to Mustang Showroom are documented in this file, following t
 
 ### Added
 
-- Selecting a part now turns the rest of the car into faint glass, so the chosen part stands out wherever it sits, even deep in the engine bay or under the floor. Hovering another part shows it solid again, and deselecting restores the car.
+- Selecting a part now turns the rest of the car into faint matte glass, with its chrome and clearcoat sparkle turned down, so the chosen part stands out wherever it sits, even deep in the engine bay or under the floor. Hovering another part shows it solid again, and deselecting restores the car.
 
 ### Changed
 

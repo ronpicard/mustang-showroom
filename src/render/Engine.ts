@@ -184,7 +184,14 @@ const HIGHLIGHT_CONFIG: Record<HighlightKind, { color: number; intensity: number
   selected: { color: 0xffb35c, intensity: 0.2 },
 }
 /** While a part is selected, every other part is drawn this faint so the selection stands out. */
-const GHOST_OPACITY = 0.07
+const GHOST_OPACITY = 0.06
+/**
+ * Ghosted parts keep only this much of their reflections and gloss: at full strength the chrome,
+ * clearcoat and light-panel highlights still sparkle through the faint shell as the turntable
+ * turns, which draws the eye away from the selected part.
+ */
+const GHOST_REFLECTION = 0.3
+const GHOST_MIN_ROUGHNESS = 0.55
 
 // -------------------------------------------------------------------------------------------
 // Headlights and taillights
@@ -336,7 +343,7 @@ export function createEngine(canvas: HTMLCanvasElement, events: EngineEvents): E
   // --- Emphasis: highlight and ghost variants cached per (material, kind), never mutating the
   // shared car materials. Which variant a part wears follows `partEmphasisFor`.
 
-  const variantCache = new Map<string, { source: THREE.Material; variant: THREE.MeshStandardMaterial }>()
+  const variantCache = new Map<string, { source: THREE.Material; kind: NonNullable<PartEmphasis>; variant: THREE.MeshStandardMaterial }>()
   const originalMaterials = new WeakMap<THREE.Mesh, THREE.Material | THREE.Material[]>()
 
   function variantOf(material: THREE.Material, kind: NonNullable<PartEmphasis>): THREE.Material {
@@ -349,13 +356,14 @@ export function createEngine(canvas: HTMLCanvasElement, events: EngineEvents): E
       variant.opacity = Math.min(material.opacity, GHOST_OPACITY)
       variant.depthWrite = false
       variant.emissiveIntensity = 0
+      dullGhost(variant, material as THREE.MeshStandardMaterial)
     } else {
       const config = HIGHLIGHT_CONFIG[kind]
       variant.emissive.set(config.color)
       variant.emissiveIntensity = config.intensity
       variant.emissiveMap = null
     }
-    variantCache.set(key, { source: material, variant })
+    variantCache.set(key, { source: material, kind, variant })
     return variant
   }
 
@@ -385,13 +393,24 @@ export function createEngine(canvas: HTMLCanvasElement, events: EngineEvents): E
   }
 
   /** The paint changed on the shared material; the variants cloned from it follow. */
+  /** Softens a ghost variant's reflections so it reads as matte glass rather than a sparkle. */
+  function dullGhost(variant: THREE.MeshStandardMaterial, source: THREE.MeshStandardMaterial): void {
+    variant.envMapIntensity = source.envMapIntensity * GHOST_REFLECTION
+    variant.roughness = Math.max(source.roughness, GHOST_MIN_ROUGHNESS)
+    if (variant instanceof THREE.MeshPhysicalMaterial) {
+      variant.clearcoat = 0
+      variant.transmission = 0
+    }
+  }
+
   function refreshPaintVariants(): void {
     const paint = assembly.materials.paint
-    for (const { source, variant } of variantCache.values()) {
+    for (const { source, kind, variant } of variantCache.values()) {
       if (source !== paint) continue
       variant.color.copy(paint.color)
       variant.metalness = paint.metalness
       variant.roughness = paint.roughness
+      if (kind === 'ghost') dullGhost(variant, paint)
       variant.needsUpdate = true
     }
   }
