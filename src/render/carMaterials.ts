@@ -92,7 +92,7 @@ export function createCarMaterials(): CarMaterials {
     clearcoatRoughness: 0.03,
     transparent: true,
     opacity: 0.42,
-    envMapIntensity: 0.6,
+    envMapIntensity: 0.9,
     side: THREE.DoubleSide,
     depthWrite: false,
   })

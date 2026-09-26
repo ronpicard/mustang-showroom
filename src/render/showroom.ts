@@ -51,8 +51,8 @@ function disposeAll(items: readonly Disposable[]): void {
 // Palette
 // -------------------------------------------------------------------------------------------
 
-const WALL_COLOR = 0x8e9096
-const CEILING_COLOR = 0x6e7076
+const WALL_COLOR = 0x141517
+const CEILING_COLOR = 0x0c0c0e
 const TURNTABLE_TOP_COLOR = 0x141416
 const TURNTABLE_EDGE_COLOR = 0xa0a4a8
 const LED_COLOR = 0xdfe8ff
@@ -131,21 +131,21 @@ const SOFTBOX_WIDTH = 30
 const SOFTBOX_Y = 150
 const SOFTBOX_X = 70
 const SOFTBOX_TILT = THREE.MathUtils.degToRad(12)
-const SOFTBOX_INTENSITY = 1.3
+const SOFTBOX_INTENSITY = 1.4
 const SOFTBOX_FRAME_THICKNESS = 2
 
 /** Six recessed can lights in a ring above the turntable. */
 const CAN_LIGHT_COUNT = 6
 const CAN_LIGHT_RING_RADIUS = 150
 const CAN_LIGHT_DIAMETER = 10
-const CAN_LIGHT_DISC_INTENSITY = 3.5
+const CAN_LIGHT_DISC_INTENSITY = 2.5
 /**
  * three 0.186 keeps physically-based lighting on at all times, so `SpotLight.intensity` is in
  * candela. At ~150 in throw with `decay = 1.4` and the engine's ACES exposure of 1.0, 2500 cd
  * reads as a bright but not blown-out pool; pick this as the starting point and let the engine
  * author retune once the car materials are in.
  */
-const CAN_LIGHT_SPOT_INTENSITY = 6500
+const CAN_LIGHT_SPOT_INTENSITY = 2500
 const CAN_LIGHT_SPOT_DECAY = 1.4
 const CAN_LIGHT_SPOT_ANGLE = 0.55
 const CAN_LIGHT_SPOT_PENUMBRA = 0.6
@@ -155,12 +155,26 @@ const CAN_LIGHT_SHADOW_NORMAL_BIAS = 0.02
 /** Ring indices (of `CAN_LIGHT_COUNT`, starting at +Z and going clockwise) that cast shadows: one
  * from the front-left, one from the rear-right, so the car reads shadows from two directions. */
 const CAN_LIGHT_SHADOW_INDICES: ReadonlySet<number> = new Set([2, 5])
+/**
+ * The car's own lighting rig: three tight spots on the turntable (a key from the front quarter,
+ * a fill from the other side, a rim from behind) so the car stays bright while the room around
+ * it stays dark. Positions are offsets from the car's centre, on the ceiling.
+ */
+const CAR_SPOT_COLOR = 0xfff6e6
+const CAR_SPOTS: readonly { x: number; z: number; intensity: number }[] = [
+  { x: -130, z: 150, intensity: 16000 },
+  { x: 160, z: -30, intensity: 9500 },
+  { x: -20, z: -190, intensity: 10000 },
+]
+const CAR_SPOT_DECAY = 1.4
+const CAR_SPOT_ANGLE = 0.5
+const CAR_SPOT_PENUMBRA = 0.55
 
-const HEMI_SKY_COLOR = 0xb8bcc6
-const HEMI_GROUND_COLOR = 0x55565c
-const HEMI_INTENSITY = 1.4
+const HEMI_SKY_COLOR = 0x3a3d44
+const HEMI_GROUND_COLOR = 0x0a0a0c
+const HEMI_INTENSITY = 0.35
 const AMBIENT_COLOR = 0xffffff
-const AMBIENT_INTENSITY = 0.35
+const AMBIENT_INTENSITY = 0.08
 
 const TURNTABLE_SEGMENTS = 72
 /** The brushed edge ring's radial thickness. */
@@ -231,10 +245,10 @@ function createContactShadowTexture(): THREE.CanvasTexture {
 }
 
 const FLOOR_TEXTURE_SEED = 0x9f00d
-const FLOOR_BASE_COLOR = '#5c5e64'
-const FLOOR_MOTTLE_LIGHT = 'rgba(200, 204, 210, 0.08)'
-const FLOOR_MOTTLE_DARK = 'rgba(0, 0, 0, 0.08)'
-const FLOOR_SEAM_COLOR = 'rgba(230, 232, 236, 0.14)'
+const FLOOR_BASE_COLOR = '#101013'
+const FLOOR_MOTTLE_LIGHT = 'rgba(148, 152, 160, 0.05)'
+const FLOOR_MOTTLE_DARK = 'rgba(0, 0, 0, 0.05)'
+const FLOOR_SEAM_COLOR = 'rgba(180, 184, 190, 0.06)'
 
 function makeFloorTexture(): THREE.CanvasTexture {
   const { canvas, ctx } = makeCanvas(FLOOR_TEXTURE_SIZE)
@@ -293,7 +307,7 @@ function buildFloor(): FloorBuild {
   const reflector = new Reflector(reflectorGeometry, {
     textureWidth: 1024,
     textureHeight: 1024,
-    color: 0x707070,
+    color: 0x303030,
     clipBias: 0.003,
   })
   reflector.rotation.x = -Math.PI / 2
@@ -712,7 +726,21 @@ function buildCeiling(): CeilingBuild {
   }
   environmentObjects.push(canLights)
 
-  group.add(ceiling, softboxes, canLights)
+  const carSpots = new THREE.Group()
+  carSpots.name = 'carSpots'
+  for (const { x, z, intensity } of CAR_SPOTS) {
+    const spot = new THREE.SpotLight(CAR_SPOT_COLOR, intensity)
+    spot.position.set(CAR_CENTER[0] + x, CEILING_Y - 1, CAR_CENTER[2] + z)
+    spot.target.position.copy(aimTarget)
+    spot.decay = CAR_SPOT_DECAY
+    spot.angle = CAR_SPOT_ANGLE
+    spot.penumbra = CAR_SPOT_PENUMBRA
+    carSpots.add(spot, spot.target)
+    spotLights.push(spot)
+  }
+  environmentObjects.push(carSpots)
+
+  group.add(ceiling, softboxes, canLights, carSpots)
 
   return { group, environmentObjects, spotLights, dispose: () => disposeAll(disposables) }
 }

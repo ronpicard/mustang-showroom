@@ -40,16 +40,16 @@ import { CATCH_FLARE_SECONDS, STARTER_CRANK_SECONDS } from '../engineSound.ts'
 // Renderer / post-processing look
 // -------------------------------------------------------------------------------------------
 
-const BACKGROUND_COLOR = 0x3a3c42
-const TONE_MAPPING_EXPOSURE = 1.15
-const ENVIRONMENT_INTENSITY = 1.1
+const BACKGROUND_COLOR = 0x08080a
+const TONE_MAPPING_EXPOSURE = 1.0
+const ENVIRONMENT_INTENSITY = 0.9
 /** Sigma for the environment map's PMREM blur: a soft, wide light source, not a mirror. */
 const ENVIRONMENT_SIGMA = 0.02
 /** MSAA samples on the post-processing target; 0 would alias every edge of the car. */
 const COMPOSER_MSAA_SAMPLES = 4
 const BLOOM_STRENGTH = 0.14
 const BLOOM_RADIUS = 0.3
-const BLOOM_THRESHOLD = 1.6
+const BLOOM_THRESHOLD = 1.35
 
 /**
  * Rendering cost steps, best first. The engine starts at the first step a device can likely
