@@ -1,6 +1,5 @@
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
-import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import {
   FRONT_DISC_DIAMETER,
   REAR_DRUM_DIAMETER,
@@ -30,7 +29,7 @@ import { tagPart, type PartBuild } from './partBuild.ts'
 // -------------------------------------------------------------------------------------------
 
 /** Radial segments for every lathed part; the wheel camera looks at these up close. */
-const LATHE_SEGMENTS = 48
+const LATHE_SEGMENTS = 72
 /** Radial segments for the smaller brake lathes, which sit further from the wheel camera's focus. */
 const BRAKE_LATHE_SEGMENTS = 32
 
@@ -42,52 +41,26 @@ const HALF_RIM_WIDTH = RIM_WIDTH / 2
 // Tyre
 // -------------------------------------------------------------------------------------------
 
-/**
- * How far each tread block stands proud of the tyre's carcass. The ground contact point is
- * `TIRE_RADIUS` (matching `WHEEL_CENTER_Y` in `dimensions.ts`), so the carcass under the blocks
- * has to sit this far inside it, or the blocks would poke through y = 0 at the bottom of the wheel.
- */
-const TREAD_BLOCK_HEIGHT = 0.4
-/** Radius of the tread carcass, under the raised blocks; `TIRE_RADIUS` is the loaded (contact) radius. */
-const TREAD_BASE_RADIUS = TIRE_RADIUS - TREAD_BLOCK_HEIGHT
+/** The shallow raised ribs stay inside the loaded tyre radius, including their outer corners. */
+const TREAD_BLOCK_HEIGHT = 0.07
+const TREAD_BASE_RADIUS = TIRE_RADIUS - 0.12
 
 /** Where the bead meets the rim; a hair proud of `RIM_RADIUS` so the tyre reads as seated on it. */
 const TIRE_BEAD_RADIUS = RIM_RADIUS + 0.3
-/** Radius of the sidewall's widest bulge, between the bead and the shoulder. */
-const TIRE_SIDEWALL_RADIUS = TIRE_RADIUS - 1
-/** Radius where the rounded shoulder gives way to the flat tread carcass. */
-const TIRE_SHOULDER_RADIUS = TREAD_BASE_RADIUS - 0.05
-/** Axial half-width of the flat tread band, centred on the tyre. */
-const TIRE_TREAD_HALF_WIDTH = 1.5
-/** Axial half-width of the sidewall bulge station. */
-const TIRE_SIDEWALL_HALF_WIDTH = HALF_TIRE_WIDTH - 1.6
-/** Axial half-width of the shoulder station. */
-const TIRE_SHOULDER_HALF_WIDTH = HALF_TIRE_WIDTH - 2.3
-/** How far the two circumferential grooves cut into the tread carcass. */
-const GROOVE_DEPTH = 0.3
-/** Axial half-width of each groove notch. */
-const GROOVE_HALF_WIDTH = 0.3
-/** Axial offset of each groove's centre from the tyre's midline (one groove each side). */
-const GROOVE_CENTER_OFFSET = 0.85
+const TIRE_TREAD_HALF_WIDTH = 2.25
+const GROOVE_DEPTH = 0.1
+const GROOVE_HALF_WIDTH = 0.12
+const GROOVE_CENTER_OFFSET = 0.72
+const TREAD_BLOCK_COUNT = 56
+const TREAD_BLOCK_AXIAL_LENGTH = 0.8
+const TREAD_BLOCK_FILL = 0.68
 
-/** How many raised tread blocks run around the tyre's circumference (60-80 per the brief). */
-const TREAD_BLOCK_COUNT = 72
-/** Tread blocks sit on the centre rib, between the two grooves; this is that rib's clear width. */
-const TREAD_BLOCK_AXIAL_LENGTH = 1
-/** Fraction of each block's circumferential slot it actually fills, leaving a groove between blocks. */
-const TREAD_BLOCK_FILL = 0.72
-
-/** How many raised white-letter blocks run around the outer sidewall. */
-const LETTER_COUNT = 8
-/** Axial station of the letter band, on the sidewall bulge of the outboard (local +Y) face. */
-const LETTER_AXIAL_Y = TIRE_SIDEWALL_HALF_WIDTH
-/** Radius the letter band sits at, matching the sidewall bulge it's raised from. */
-const LETTER_RADIUS = TIRE_SIDEWALL_RADIUS
-const LETTER_TANGENTIAL_WIDTH = 2.6
-const LETTER_AXIAL_LENGTH = 1.1
-const LETTER_HEIGHT = 0.15
-/** The one extra material the brief allows: a slightly lighter grey for the raised sidewall lettering. */
-const WHITE_LETTER_COLOR = 0xd8d4c8
+const LETTER_RADIUS = 10.35
+const LETTER_GLYPH_WIDTH = 1.15
+const LETTER_GLYPH_HEIGHT = 1.3
+const LETTER_STROKE_WIDTH = 0.13
+const LETTER_HEIGHT = 0.12
+const WHITE_LETTER_COLOR = 0xe3dac2
 const WHITE_LETTER_ROUGHNESS = 0.9
 
 // -------------------------------------------------------------------------------------------
@@ -106,26 +79,25 @@ const RIM_BARREL_INNER_Y = -HALF_RIM_WIDTH
 /** Where the centre dish meets the chrome lip. */
 const RIM_DISH_OUTER_RADIUS = RIM_RADIUS - 1
 /** Where the spokes and cap meet the dish; the hub's visible radius. */
-const HUB_RADIUS = 3
+const HUB_RADIUS = 2.2
 
 const SPOKE_COUNT = 5
 const SPOKE_ANGLE_STEP = (Math.PI * 2) / SPOKE_COUNT
 /** Spokes run from the hub out to just under the chrome lip. */
 const SPOKE_OUTER_RADIUS = RIM_RADIUS - 0.3
-const SPOKE_SEGMENTS = 3
 const SPOKE_HUB_WIDTH = 1.2
 /** Spokes fan out wider toward the lip, per the Magnum 500's five-spoke face. */
 const SPOKE_RIM_WIDTH = 2.4
-const SPOKE_PROUD_HEIGHT = 1.2
-const SPOKE_ROUND_RADIUS = 0.25
+const SPOKE_PROUD_HEIGHT = 0.55
+const SPOKE_ROUND_RADIUS = 0.14
 
-const CENTER_CAP_RADIUS = 2.5
+const CENTER_CAP_RADIUS = 1.6
 const CENTER_CAP_Y = RIM_DISH_Y + 1.6
 
 const LUG_NUT_COUNT = 5
-const LUG_NUT_RING_RADIUS = HUB_RADIUS + 0.9
-const LUG_NUT_RADIUS = 0.55
-const LUG_NUT_LENGTH = 1
+const LUG_NUT_RING_RADIUS = HUB_RADIUS + 0.35
+const LUG_NUT_RADIUS = 0.35
+const LUG_NUT_LENGTH = 0.65
 
 // -------------------------------------------------------------------------------------------
 // Brakes
@@ -169,7 +141,7 @@ const REAR_BACKING_PLATE_RADIUS = REAR_DRUM_RADIUS + 0.3
 
 /**
  * A box template positioned at `radius` and rotated to angle `i / count` around the local Y
- * (spin) axis — used for tread blocks, sidewall letters and rotor vanes alike. `width` is
+ * (spin) axis — used for tread blocks and rotor vanes. `width` is
  * tangential (circumferential), `height` is axial, `depth` is radial (the box's outer face sits
  * at `radius + depth / 2`).
  */
@@ -203,7 +175,7 @@ function finishMesh(mesh: THREE.Mesh): THREE.Mesh {
 }
 
 /**
- * `mergeGeometries` requires every input to agree on whether it's indexed (`RoundedBoxGeometry`
+ * `mergeGeometries` requires every input to agree on whether it's indexed (`ExtrudeGeometry`
  * isn't; the three primitives are), so every geometry going into a merge is normalised through
  * this first.
  */
@@ -215,27 +187,33 @@ function forMerge(geometries: THREE.BufferGeometry[]): THREE.BufferGeometry[] {
 // Tyre geometry
 // -------------------------------------------------------------------------------------------
 
+/** Radius / axial stations from the bead across the rounded outboard sidewall to the tread. */
+const OUTBOARD_SIDEWALL = [
+  new THREE.Vector2(RIM_RADIUS, HALF_TIRE_WIDTH - 1),
+  new THREE.Vector2(TIRE_BEAD_RADIUS, HALF_TIRE_WIDTH - 0.55),
+  new THREE.Vector2(8.6, HALF_TIRE_WIDTH - 0.25),
+  new THREE.Vector2(9.5, HALF_TIRE_WIDTH - 0.08),
+  new THREE.Vector2(10.5, HALF_TIRE_WIDTH - 0.04),
+  new THREE.Vector2(11.3, HALF_TIRE_WIDTH - 0.1),
+  new THREE.Vector2(12, HALF_TIRE_WIDTH - 0.36),
+  new THREE.Vector2(12.45, HALF_TIRE_WIDTH - 0.75),
+  new THREE.Vector2(12.78, HALF_TIRE_WIDTH - 1.35),
+  new THREE.Vector2(12.96, HALF_TIRE_WIDTH - 1.9),
+  new THREE.Vector2(TREAD_BASE_RADIUS, TIRE_TREAD_HALF_WIDTH),
+]
+
 function buildTireProfile(): THREE.Vector2[] {
-  const treadNear = TIRE_TREAD_HALF_WIDTH
   const grooveOuter = GROOVE_CENTER_OFFSET + GROOVE_HALF_WIDTH
   const grooveInner = GROOVE_CENTER_OFFSET - GROOVE_HALF_WIDTH
   return [
-    new THREE.Vector2(RIM_RADIUS, -HALF_TIRE_WIDTH),
-    new THREE.Vector2(TIRE_BEAD_RADIUS, -HALF_TIRE_WIDTH + 0.3),
-    new THREE.Vector2(TIRE_SIDEWALL_RADIUS, -TIRE_SIDEWALL_HALF_WIDTH),
-    new THREE.Vector2(TIRE_SHOULDER_RADIUS, -TIRE_SHOULDER_HALF_WIDTH),
-    new THREE.Vector2(TREAD_BASE_RADIUS, -treadNear),
+    ...OUTBOARD_SIDEWALL.map((station) => new THREE.Vector2(station.x, -station.y)),
     new THREE.Vector2(TREAD_BASE_RADIUS, -grooveOuter),
     new THREE.Vector2(TREAD_BASE_RADIUS - GROOVE_DEPTH, -GROOVE_CENTER_OFFSET),
     new THREE.Vector2(TREAD_BASE_RADIUS, -grooveInner),
     new THREE.Vector2(TREAD_BASE_RADIUS, grooveInner),
     new THREE.Vector2(TREAD_BASE_RADIUS - GROOVE_DEPTH, GROOVE_CENTER_OFFSET),
     new THREE.Vector2(TREAD_BASE_RADIUS, grooveOuter),
-    new THREE.Vector2(TREAD_BASE_RADIUS, treadNear),
-    new THREE.Vector2(TIRE_SHOULDER_RADIUS, TIRE_SHOULDER_HALF_WIDTH),
-    new THREE.Vector2(TIRE_SIDEWALL_RADIUS, TIRE_SIDEWALL_HALF_WIDTH),
-    new THREE.Vector2(TIRE_BEAD_RADIUS, HALF_TIRE_WIDTH - 0.3),
-    new THREE.Vector2(RIM_RADIUS, HALF_TIRE_WIDTH),
+    ...[...OUTBOARD_SIDEWALL].reverse(),
   ]
 }
 
@@ -243,28 +221,92 @@ function buildTireProfile(): THREE.Vector2[] {
 function buildTireGeometry(): THREE.BufferGeometry {
   const body = new THREE.LatheGeometry(buildTireProfile(), LATHE_SEGMENTS)
   const blockSlot = (Math.PI * 2 * TREAD_BASE_RADIUS) / TREAD_BLOCK_COUNT
-  const blocks = ringOfBoxes(
+  const firstRow = ringOfBoxes(
     TREAD_BLOCK_COUNT,
     blockSlot * TREAD_BLOCK_FILL,
     TREAD_BLOCK_AXIAL_LENGTH,
     TREAD_BLOCK_HEIGHT,
     TREAD_BASE_RADIUS,
-    0,
+    -1.48,
   )
-  return mergeGeometries(forMerge([body, ...blocks]))
+  const secondRow = ringOfBoxes(
+    TREAD_BLOCK_COUNT,
+    blockSlot * TREAD_BLOCK_FILL,
+    TREAD_BLOCK_AXIAL_LENGTH,
+    TREAD_BLOCK_HEIGHT,
+    TREAD_BASE_RADIUS,
+    1.48,
+  )
+  for (const block of secondRow) block.rotateY(Math.PI / TREAD_BLOCK_COUNT)
+  return mergeGeometries(forMerge([body, ...firstRow, ...secondRow]))
 }
 
-/** The raised white-letter blocks on the outboard sidewall, one mesh in its own material. */
-function buildLetterGeometry(): THREE.BufferGeometry {
-  const blocks = ringOfBoxes(
-    LETTER_COUNT,
-    LETTER_TANGENTIAL_WIDTH,
-    LETTER_AXIAL_LENGTH,
-    LETTER_HEIGHT,
-    LETTER_RADIUS,
-    LETTER_AXIAL_Y,
-  )
-  return mergeGeometries(forMerge(blocks))
+/** Simple strokes in unit glyph coordinates: tangential X and radial Z. */
+type LetterStroke = readonly [number, number, number, number]
+const LETTER_GLYPHS: Record<string, readonly LetterStroke[]> = {
+  R: [[0, 0, 0, 1], [0, 1, 0.7, 1], [0.7, 1, 0.85, 0.8], [0.85, 0.8, 0.7, 0.58], [0.7, 0.58, 0, 0.58], [0.4, 0.58, 0.9, 0]],
+  A: [[0, 0, 0.4, 1], [0.4, 1, 0.6, 1], [0.6, 1, 1, 0], [0.17, 0.42, 0.83, 0.42]],
+  D: [[0, 0, 0, 1], [0, 1, 0.62, 1], [0.62, 1, 0.9, 0.75], [0.9, 0.75, 0.9, 0.25], [0.9, 0.25, 0.62, 0], [0.62, 0, 0, 0]],
+  I: [[0.15, 1, 0.85, 1], [0.5, 1, 0.5, 0], [0.15, 0, 0.85, 0]],
+  L: [[0, 1, 0, 0], [0, 0, 0.85, 0]],
+  G: [[0.9, 0.82, 0.65, 1], [0.65, 1, 0.2, 1], [0.2, 1, 0, 0.75], [0, 0.75, 0, 0.25], [0, 0.25, 0.2, 0], [0.2, 0, 0.9, 0], [0.9, 0, 0.9, 0.48], [0.9, 0.48, 0.53, 0.48]],
+  T: [[0, 1, 1, 1], [0.5, 1, 0.5, 0]],
+  F: [[0, 0, 0, 1], [0, 1, 0.9, 1], [0, 0.52, 0.7, 0.52]],
+  6: [[0.85, 1, 0.3, 1], [0.3, 1, 0, 0.58], [0, 0.58, 0, 0.2], [0, 0.2, 0.25, 0], [0.25, 0, 0.72, 0], [0.72, 0, 0.9, 0.22], [0.9, 0.22, 0.72, 0.5], [0.72, 0.5, 0, 0.5]],
+  0: [[0.25, 0, 0.75, 0], [0.75, 0, 0.95, 0.25], [0.95, 0.25, 0.95, 0.75], [0.95, 0.75, 0.75, 1], [0.75, 1, 0.25, 1], [0.25, 1, 0.05, 0.75], [0.05, 0.75, 0.05, 0.25], [0.05, 0.25, 0.25, 0]],
+  '-': [[0.2, 0.5, 0.8, 0.5]],
+  1: [[0.2, 0.75, 0.55, 1], [0.55, 1, 0.55, 0], [0.2, 0, 0.9, 0]],
+  5: [[0.9, 1, 0.1, 1], [0.1, 1, 0.1, 0.53], [0.1, 0.53, 0.72, 0.53], [0.72, 0.53, 0.9, 0.28], [0.9, 0.28, 0.72, 0], [0.72, 0, 0.1, 0]],
+}
+
+function sidewallAxialY(radius: number): number {
+  for (let i = 1; i < OUTBOARD_SIDEWALL.length; i += 1) {
+    const outer = OUTBOARD_SIDEWALL[i]
+    if (radius <= outer.x) {
+      const inner = OUTBOARD_SIDEWALL[i - 1]
+      return THREE.MathUtils.lerp(inner.y, outer.y, (radius - inner.x) / (outer.x - inner.x))
+    }
+  }
+  return OUTBOARD_SIDEWALL[OUTBOARD_SIDEWALL.length - 1].y
+}
+
+/** Thin raised strokes follow the sidewall surface and the two text arcs. */
+function buildLetterGeometry(mirrored: boolean): THREE.BufferGeometry {
+  const strokes: THREE.BufferGeometry[] = []
+  const topAngle = mirrored ? 0 : Math.PI
+  for (const [label, upper, spacing] of [['RADIAL GT', true, 0.18], ['F60-15', false, 0.19]] as const) {
+    const direction = upper ? 1 : -1
+    const arcCenter = topAngle + (upper ? 0 : Math.PI)
+    for (let index = 0; index < label.length; index += 1) {
+      const glyph = LETTER_GLYPHS[label[index]] ?? []
+      const centerAngle = arcCenter + (index - (label.length - 1) / 2) * spacing * direction
+      for (const [x1, z1, x2, z2] of glyph) {
+        const dx = (x2 - x1) * LETTER_GLYPH_WIDTH
+        const dz = (z2 - z1) * LETTER_GLYPH_HEIGHT
+        const stroke = new THREE.BoxGeometry(Math.hypot(dx, dz), LETTER_HEIGHT, LETTER_STROKE_WIDTH)
+        stroke.rotateY(-Math.atan2(dz, dx))
+        stroke.translate((x1 + x2) * LETTER_GLYPH_WIDTH / 2, 0, (z1 + z2) * LETTER_GLYPH_HEIGHT / 2)
+        const positions = stroke.getAttribute('position') as THREE.BufferAttribute
+        for (let vertex = 0; vertex < positions.count; vertex += 1) {
+          const angle = centerAngle + (positions.getX(vertex) / LETTER_GLYPH_WIDTH - 0.5) * LETTER_GLYPH_WIDTH / LETTER_RADIUS * direction
+          const radius = LETTER_RADIUS + (positions.getZ(vertex) / LETTER_GLYPH_HEIGHT - 0.5) * LETTER_GLYPH_HEIGHT * direction
+          const axialY = sidewallAxialY(radius) + 0.04 + positions.getY(vertex)
+          positions.setXYZ(vertex, radius * Math.cos(angle), axialY, radius * Math.sin(angle))
+        }
+        // The polar mapping reverses handedness; flip the triangles so the broad faces
+        // point out of the tire, rather than leaving only their thin edges visible.
+        const indexBuffer = stroke.getIndex()!
+        for (let i = 0; i < indexBuffer.count; i += 3) {
+          const b = indexBuffer.getX(i + 1)
+          indexBuffer.setX(i + 1, indexBuffer.getX(i + 2))
+          indexBuffer.setX(i + 2, b)
+        }
+        stroke.computeVertexNormals()
+        strokes.push(stroke)
+      }
+    }
+  }
+  return mergeGeometries(forMerge(strokes))
 }
 
 // -------------------------------------------------------------------------------------------
@@ -284,16 +326,18 @@ function buildChromeGeometry(): THREE.BufferGeometry {
     LATHE_SEGMENTS,
   )
 
-  const spokeSegmentLength = (SPOKE_OUTER_RADIUS - HUB_RADIUS) / SPOKE_SEGMENTS
-  const spokeParts: THREE.BufferGeometry[] = []
-  for (let segment = 0; segment < SPOKE_SEGMENTS; segment += 1) {
-    const t = (segment + 0.5) / SPOKE_SEGMENTS
-    const width = THREE.MathUtils.lerp(SPOKE_HUB_WIDTH, SPOKE_RIM_WIDTH, t)
-    const box = new RoundedBoxGeometry(spokeSegmentLength, SPOKE_PROUD_HEIGHT, width, 1, SPOKE_ROUND_RADIUS)
-    box.translate(HUB_RADIUS + (segment + 0.5) * spokeSegmentLength, RIM_DISH_Y + SPOKE_PROUD_HEIGHT / 2, 0)
-    spokeParts.push(box)
-  }
-  const oneSpoke = mergeGeometries(forMerge(spokeParts))
+  const outline = new THREE.Shape()
+  outline.moveTo(HUB_RADIUS - 0.2, -SPOKE_HUB_WIDTH / 2)
+  outline.quadraticCurveTo(HUB_RADIUS + 1.8, -SPOKE_HUB_WIDTH / 2, SPOKE_OUTER_RADIUS, -SPOKE_RIM_WIDTH / 2)
+  outline.lineTo(SPOKE_OUTER_RADIUS, SPOKE_RIM_WIDTH / 2)
+  outline.quadraticCurveTo(HUB_RADIUS + 1.8, SPOKE_HUB_WIDTH / 2, HUB_RADIUS - 0.2, SPOKE_HUB_WIDTH / 2)
+  outline.closePath()
+  const oneSpoke = new THREE.ExtrudeGeometry(outline, {
+    depth: SPOKE_PROUD_HEIGHT, bevelEnabled: true, bevelThickness: SPOKE_ROUND_RADIUS,
+    bevelSize: SPOKE_ROUND_RADIUS, bevelSegments: 3, curveSegments: 8, steps: 1,
+  })
+  oneSpoke.rotateX(-Math.PI / 2)
+  oneSpoke.translate(0, RIM_DISH_Y + 0.45, 0)
   const spokes: THREE.BufferGeometry[] = []
   for (let i = 0; i < SPOKE_COUNT; i += 1) {
     const spoke = oneSpoke.clone()
@@ -354,7 +398,7 @@ function buildWheel(
   group.name = id
 
   const tire = finishMesh(new THREE.Mesh(buildTireGeometry(), materials.rubber))
-  const letters = finishMesh(new THREE.Mesh(buildLetterGeometry(), whiteLetter))
+  const letters = finishMesh(new THREE.Mesh(buildLetterGeometry(mirrored), whiteLetter))
   const chrome = finishMesh(new THREE.Mesh(buildChromeGeometry(), materials.chrome))
   const dish = finishMesh(new THREE.Mesh(buildDishGeometry(), materials.blackTrim))
   const barrel = finishMesh(new THREE.Mesh(buildBarrelGeometry(), materials.steelDark))

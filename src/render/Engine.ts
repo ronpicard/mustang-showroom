@@ -48,9 +48,9 @@ const ENVIRONMENT_INTENSITY = 0.9
 const ENVIRONMENT_SIGMA = 0.02
 /** MSAA samples on the post-processing target; 0 would alias every edge of the car. */
 const COMPOSER_MSAA_SAMPLES = 4
-const BLOOM_STRENGTH = 0.14
+const BLOOM_STRENGTH = 0.045
 const BLOOM_RADIUS = 0.3
-const BLOOM_THRESHOLD = 1.35
+const BLOOM_THRESHOLD = 2.8
 
 /**
  * Rendering cost steps, best first. The engine starts at the first step a device can likely
@@ -242,7 +242,7 @@ export function createEngine(canvas: HTMLCanvasElement, events: EngineEvents): E
   renderer.toneMappingExposure = TONE_MAPPING_EXPOSURE
   renderer.outputColorSpace = THREE.SRGBColorSpace
   renderer.shadowMap.enabled = true
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap
+  renderer.shadowMap.type = THREE.PCFShadowMap
 
   const scene = new THREE.Scene()
   scene.background = new THREE.Color(BACKGROUND_COLOR)

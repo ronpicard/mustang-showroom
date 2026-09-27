@@ -129,8 +129,8 @@ function dropped(row: readonly THREE.Vector3[], axis: 'x' | 'y' | 'z', amount: n
 
 /**
  * The one grid-to-mesh primitive `loft` (in `bodyProfile.ts`) doesn't cover: a quad-strip grid
- * with an optional hole (used for the wheel arches and the valance/tail-panel cut-outs). A cell
- * is dropped when `isHole` is true at its centre.
+ * with an optional hole (used for the wheel arches and the valance/tail-panel cut-outs).
+ * Triangles crossing a cut-out are clipped at its contour, keeping curved edges smooth.
  */
 function gridGeometry(
   rows: readonly (readonly THREE.Vector3[])[],
@@ -139,8 +139,8 @@ function gridGeometry(
 ): THREE.BufferGeometry {
   const rowCount = rows.length
   const colCount = rows[0].length
-  const positions = new Float32Array(rowCount * colCount * 3)
-  const uvs = new Float32Array(rowCount * colCount * 2)
+  const positions = new Array<number>(rowCount * colCount * 3)
+  const uvs = new Array<number>(rowCount * colCount * 2)
   for (let i = 0; i < rowCount; i++) {
     for (let j = 0; j < colCount; j++) {
       const p = rows[i][j]
@@ -153,24 +153,61 @@ function gridGeometry(
     }
   }
   const indices: number[] = []
-  const mid = new THREE.Vector3()
+  const cutVertices = new Map<string, number>()
+  const point = (index: number): THREE.Vector3 => new THREE.Vector3().fromArray(positions, index * 3)
+  function boundary(a: number, b: number): number {
+    const key = `${Math.min(a, b)}:${Math.max(a, b)}`
+    const cached = cutVertices.get(key)
+    if (cached !== undefined) return cached
+    const start = point(a)
+    const end = point(b)
+    const startInside = isHole!(start)
+    let low = 0
+    let high = 1
+    const probe = new THREE.Vector3()
+    for (let i = 0; i < 16; i++) {
+      const t = (low + high) / 2
+      probe.lerpVectors(start, end, t)
+      if (isHole!(probe) === startInside) low = t
+      else high = t
+    }
+    const t = (low + high) / 2
+    probe.lerpVectors(start, end, t)
+    const index = positions.length / 3
+    positions.push(probe.x, probe.y, probe.z)
+    uvs.push(THREE.MathUtils.lerp(uvs[a * 2], uvs[b * 2], t), THREE.MathUtils.lerp(uvs[a * 2 + 1], uvs[b * 2 + 1], t))
+    cutVertices.set(key, index)
+    return index
+  }
+  function triangle(a: number, b: number, c: number): void {
+    if (!isHole) {
+      indices.push(a, b, c)
+      return
+    }
+    const vertices = [a, b, c]
+    const polygon: number[] = []
+    for (let i = 0; i < 3; i++) {
+      const current = vertices[i]
+      const next = vertices[(i + 1) % 3]
+      const outside = !isHole(point(current))
+      if (outside) polygon.push(current)
+      if (outside !== !isHole(point(next))) polygon.push(boundary(current, next))
+    }
+    for (let i = 1; i + 1 < polygon.length; i++) indices.push(polygon[0], polygon[i], polygon[i + 1])
+  }
   for (let i = 0; i < rowCount - 1; i++) {
     for (let j = 0; j < colCount - 1; j++) {
-      if (isHole) {
-        mid.copy(rows[i][j]).add(rows[i][j + 1]).add(rows[i + 1][j]).add(rows[i + 1][j + 1]).multiplyScalar(0.25)
-        if (isHole(mid)) continue
-      }
       const a = i * colCount + j
       const b = a + 1
       const c = a + colCount
       const d = c + 1
-      if (flipWinding) indices.push(a, c, b, b, c, d)
-      else indices.push(a, b, c, b, d, c)
+      if (flipWinding) { triangle(a, c, b); triangle(b, c, d) }
+      else { triangle(a, b, c); triangle(b, d, c) }
     }
   }
   const geometry = new THREE.BufferGeometry()
-  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
-  geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2))
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2))
   geometry.setIndex(indices)
   geometry.computeVertexNormals()
   return geometry
@@ -316,7 +353,7 @@ function wheelhouseGeometry(side: Side, axleZ: number, panelX: number): THREE.Bu
     }
     rows.push(row)
   }
-  return gridGeometry(rows, side === 1, (p) => !insideCircleZY(p, { z: axleZ, y: WHEEL_ARCH_CENTER_Y, r }))
+  return gridGeometry(rows, side === -1, (p) => !insideCircleZY(p, { z: axleZ, y: WHEEL_ARCH_CENTER_Y, r }))
 }
 
 /** The rolled lip around a wheel arch, plus the dark wheelhouse patch behind it. */

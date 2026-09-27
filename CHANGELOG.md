@@ -10,6 +10,8 @@ All notable changes to Mustang Showroom are documented in this file, following t
 
 ### Changed
 
+- More realistic surface finishes: deeper clearcoat paint, softer chrome reflections, lightly tinted glass, textured rubber, cast metal, upholstery and woodgrain. Broad studio lights keep the body readable without the previous glare.
+- Tires now have rounded sidewalls, shallower street tread, readable raised lettering and continuous sculpted wheel spokes. Wheel openings follow smooth curves instead of stepped mesh cut-outs, and the contact shadow follows the car's footprint.
 - The car is lit by its own three-spot rig (key, fill and rim) so it reads brightly from every angle while the showroom around it stays dark, and a soft contact shadow grounds it on the turntable.
 - The engine sounds like a V8: a solenoid clunk, a labouring starter crank, the catch with a burst of pops and an rpm flare that settles into a lumpy idle, a rev that climbs through the rev range, and a shutdown that winds down with two pops. The engine bay lurches while cranking, shudders on the catch and settles into its running rattle in time with the sound.
 - Smoother edges: the render passes are multisampled.
@@ -17,6 +19,8 @@ All notable changes to Mustang Showroom are documented in this file, following t
 
 ### Fixed
 
+- The air-cleaner seal now lies flat, and the radiator sits below the closed hood. Wheelhouse liners face outward so assembled wheel openings no longer expose the mechanical parts behind them.
+- The display placard sits near the wall, keeping the showcase view clear on phones.
 - The floor no longer mirrors the car's chrome edges as flickering scribbles in front of the turntable; the car is left out of the floor's reflection pass, and the contact shadow sits clear of the platform.
 - The dark inner-fender panels behind the wheels stopped at the platform instead of the sill, so from a low angle they hung beneath the nose and tail and flickered as the turntable turned. They now end at the rocker line.
 - The front valance's turn-signal cut-outs were open holes onto the suspension, which read as a dark shape jittering at the car's front corners as it turned. They now carry amber lenses in chrome bezels.

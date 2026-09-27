@@ -62,13 +62,75 @@ const HEADLIGHT_ON_COLOR = 0xfff2d0
 const HEADLIGHT_ON_INTENSITY = 6
 const TAILLIGHT_ON_INTENSITY = 2.2
 
+const TEXTURE_SIZE = 64
+
+function seededNoise(x: number, y: number, seed: number): number {
+  let value = Math.imul(x + seed, 0x1f123bb5) ^ Math.imul(y + seed, 0x5f356495)
+  value = Math.imul(value ^ (value >>> 16), 0x45d9f3b)
+  return ((value ^ (value >>> 16)) >>> 0) / 0xffffffff
+}
+
+function makeSurfaceTexture(
+  pixel: (x: number, y: number) => [number, number, number],
+  repeatX: number,
+  repeatY: number,
+  colorSpace: THREE.ColorSpace = THREE.NoColorSpace,
+): THREE.DataTexture {
+  const data = new Uint8Array(TEXTURE_SIZE * TEXTURE_SIZE * 4)
+  for (let y = 0; y < TEXTURE_SIZE; y++) {
+    for (let x = 0; x < TEXTURE_SIZE; x++) {
+      const [red, green, blue] = pixel(x, y)
+      const offset = (y * TEXTURE_SIZE + x) * 4
+      data[offset] = red
+      data[offset + 1] = green
+      data[offset + 2] = blue
+      data[offset + 3] = 255
+    }
+  }
+  const texture = new THREE.DataTexture(data, TEXTURE_SIZE, TEXTURE_SIZE, THREE.RGBAFormat)
+  texture.wrapS = THREE.RepeatWrapping
+  texture.wrapT = THREE.RepeatWrapping
+  texture.repeat.set(repeatX, repeatY)
+  texture.magFilter = THREE.LinearFilter
+  texture.minFilter = THREE.LinearMipmapLinearFilter
+  texture.generateMipmaps = true
+  texture.colorSpace = colorSpace
+  texture.needsUpdate = true
+  return texture
+}
+
+function makeMicrotexture(seed: number, base: number, variation: number, repeats: number): THREE.DataTexture {
+  return makeSurfaceTexture((x, y) => {
+    const value = Math.round(255 * (base + (seededNoise(x, y, seed) - 0.5) * variation))
+    return [value, value, value]
+  }, repeats, repeats)
+}
+
 export function createCarMaterials(): CarMaterials {
+  const paintMicrotexture = makeMicrotexture(11, 0.97, 0.035, 4)
+  const rubberMicrotexture = makeMicrotexture(23, 0.91, 0.12, 6)
+  const castMicrotexture = makeMicrotexture(37, 0.91, 0.11, 5)
+  const vinylMicrotexture = makeMicrotexture(41, 0.94, 0.08, 6)
+  const carpetMicrotexture = makeMicrotexture(53, 0.91, 0.13, 8)
+  const woodgrainMap = makeSurfaceTexture((x, y) => {
+    const across = x / TEXTURE_SIZE
+    const along = y / TEXTURE_SIZE
+    const wave = across * 7 + 0.13 * Math.sin(along * Math.PI * 2)
+      + 0.045 * Math.sin(along * Math.PI * 4)
+    const grain = Math.sin(wave * Math.PI * 2) * 0.5
+      + Math.sin(wave * Math.PI * 6) * 0.16
+      + (seededNoise(x, y, 67) - 0.5) * 0.08
+    return [Math.round(112 + 30 * grain), Math.round(65 + 19 * grain), Math.round(34 + 10 * grain)]
+  }, 2, 1, THREE.SRGBColorSpace)
+  const textures = [paintMicrotexture, rubberMicrotexture, castMicrotexture, vinylMicrotexture, carpetMicrotexture, woodgrainMap]
+
   const paint = new THREE.MeshPhysicalMaterial({
     color: 0x2a2c30,
-    metalness: 0.55,
-    roughness: 0.38,
+    metalness: 0.05,
+    roughness: 0.26,
+    roughnessMap: paintMicrotexture,
     clearcoat: 1,
-    clearcoatRoughness: 0.05,
+    clearcoatRoughness: 0.035,
     envMapIntensity: 1.0,
     side: THREE.DoubleSide,
   })
@@ -76,22 +138,25 @@ export function createCarMaterials(): CarMaterials {
   const chrome = new THREE.MeshStandardMaterial({
     color: 0xf2f4f6,
     metalness: 1,
-    roughness: 0.07,
+    roughness: 0.16,
     envMapIntensity: 1.0,
   })
   const blackTrim = new THREE.MeshStandardMaterial({ color: 0x0c0c0e, roughness: 0.32, metalness: 0.15 })
-  const rubber = new THREE.MeshStandardMaterial({ color: 0x141416, roughness: 0.92, metalness: 0 })
+  const rubber = new THREE.MeshStandardMaterial({
+    color: 0x141416, roughness: 0.92, roughnessMap: rubberMicrotexture,
+    bumpMap: rubberMicrotexture, bumpScale: 0.025, metalness: 0,
+  })
   // Tinted, alpha-blended glass rather than physical transmission: in a dark showroom the
   // panes read as dark glass with sharp reflections, and it stays cheap and stable from inside
   // the cabin, where transmission's blurred background pass turns the view into haze.
   const glass = new THREE.MeshPhysicalMaterial({
-    color: 0x2a3438,
+    color: 0x283a34,
     metalness: 0,
     roughness: 0.04,
     clearcoat: 1,
     clearcoatRoughness: 0.03,
     transparent: true,
-    opacity: 0.42,
+    opacity: 0.3,
     envMapIntensity: 0.9,
     side: THREE.DoubleSide,
     depthWrite: false,
@@ -133,12 +198,21 @@ export function createCarMaterials(): CarMaterials {
     transparent: true,
     envMapIntensity: 1,
   })
-  const vinyl = new THREE.MeshStandardMaterial({ color: 0x151416, roughness: 0.78, metalness: 0 })
-  const carpet = new THREE.MeshStandardMaterial({ color: 0x111113, roughness: 1, metalness: 0 })
-  const woodgrain = new THREE.MeshStandardMaterial({ color: 0x4a2a14, roughness: 0.35, metalness: 0.05 })
+  const vinyl = new THREE.MeshStandardMaterial({
+    color: 0x151416, roughness: 0.78, roughnessMap: vinylMicrotexture,
+    bumpMap: vinylMicrotexture, bumpScale: 0.012, metalness: 0,
+  })
+  const carpet = new THREE.MeshStandardMaterial({
+    color: 0x111113, roughness: 1, roughnessMap: carpetMicrotexture,
+    bumpMap: carpetMicrotexture, bumpScale: 0.035, metalness: 0,
+  })
+  const woodgrain = new THREE.MeshStandardMaterial({ color: 0xffffff, map: woodgrainMap, roughness: 0.35, metalness: 0.05 })
   const interiorBlack = new THREE.MeshStandardMaterial({ color: 0x0f0f11, roughness: 0.7, metalness: 0 })
   const gaugeFace = new THREE.MeshStandardMaterial({ color: 0x0a0a0c, roughness: 0.45, metalness: 0.05 })
-  const castIron = new THREE.MeshStandardMaterial({ color: 0x3a3d40, roughness: 0.72, metalness: 0.6 })
+  const castIron = new THREE.MeshStandardMaterial({
+    color: 0x3a3d40, roughness: 0.72, roughnessMap: castMicrotexture,
+    bumpMap: castMicrotexture, bumpScale: 0.02, metalness: 0.6,
+  })
   const aluminium = new THREE.MeshStandardMaterial({ color: 0xb4b8bc, roughness: 0.45, metalness: 0.9 })
   const steelDark = new THREE.MeshStandardMaterial({ color: 0x27292c, roughness: 0.62, metalness: 0.7 })
   const steelBright = new THREE.MeshStandardMaterial({ color: 0x8c9196, roughness: 0.33, metalness: 0.95 })
@@ -172,6 +246,7 @@ export function createCarMaterials(): CarMaterials {
     underbody,
     hose,
   ]
+  let disposed = false
 
   return {
     paint,
@@ -199,10 +274,10 @@ export function createCarMaterials(): CarMaterials {
     hose,
     setPaint(info: PaintInfo) {
       paint.color.set(info.hex)
-      // Metallic paints read as metal under the clearcoat; solid colours stay dielectric with a
-      // deep gloss. Roughness follows so that flake catches the light.
-      paint.metalness = 0.15 + 0.55 * info.metallic
-      paint.roughness = 0.3 + 0.12 * info.metallic
+      // Keep both solid and metallic finishes deep and glossy beneath the clearcoat.
+      const metallic = THREE.MathUtils.clamp(info.metallic, 0, 1)
+      paint.metalness = 0.05 + 0.43 * metallic
+      paint.roughness = 0.26 + 0.02 * metallic
       paint.needsUpdate = true
     },
     setLights(on: boolean) {
@@ -210,7 +285,10 @@ export function createCarMaterials(): CarMaterials {
       taillightLens.emissiveIntensity = on ? TAILLIGHT_ON_INTENSITY : 0
     },
     disposeAll() {
+      if (disposed) return
+      disposed = true
       all.forEach((material) => material.dispose())
+      textures.forEach((texture) => texture.dispose())
     },
   }
 }

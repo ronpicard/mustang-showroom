@@ -19,6 +19,7 @@
 
 import * as THREE from 'three'
 import { Reflector } from 'three/examples/jsm/objects/Reflector.js'
+import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { CAR_CENTER, TURNTABLE_HEIGHT, TURNTABLE_RADIUS } from '../car/dimensions.ts'
 
@@ -147,11 +148,10 @@ const CAN_LIGHT_DIAMETER = 10
 const CAN_LIGHT_DISC_INTENSITY = 2.5
 /**
  * three 0.186 keeps physically-based lighting on at all times, so `SpotLight.intensity` is in
- * candela. At ~150 in throw with `decay = 1.4` and the engine's ACES exposure of 1.0, 2500 cd
- * reads as a bright but not blown-out pool; pick this as the starting point and let the engine
- * author retune once the car materials are in.
+ * candela. The ceiling spots provide restrained pools on the platform; broad area lights carry
+ * the body highlights, so the chrome no longer needs to be overexposed to make the car readable.
  */
-const CAN_LIGHT_SPOT_INTENSITY = 2500
+const CAN_LIGHT_SPOT_INTENSITY = 1000
 const CAN_LIGHT_SPOT_DECAY = 1.4
 const CAN_LIGHT_SPOT_ANGLE = 0.55
 const CAN_LIGHT_SPOT_PENUMBRA = 0.6
@@ -168,9 +168,9 @@ const CAN_LIGHT_SHADOW_INDICES: ReadonlySet<number> = new Set([2, 5])
  */
 const CAR_SPOT_COLOR = 0xfff6e6
 const CAR_SPOTS: readonly { x: number; z: number; intensity: number }[] = [
-  { x: -130, z: 150, intensity: 16000 },
-  { x: 160, z: -30, intensity: 9500 },
-  { x: -20, z: -190, intensity: 10000 },
+  { x: -130, z: 150, intensity: 4800 },
+  { x: 160, z: -30, intensity: 2800 },
+  { x: -20, z: -190, intensity: 4200 },
 ]
 const CAR_SPOT_DECAY = 1.4
 const CAR_SPOT_ANGLE = 0.5
@@ -444,7 +444,7 @@ function buildTurntable(): TurntableBuild {
   // directions, and this radial gradient darkens the platform directly beneath it the way the
   // occluded floor under a real car reads, whatever angle the lights come from.
   const contactShadow = new THREE.Mesh(
-    new THREE.PlaneGeometry(CONTACT_SHADOW_LENGTH, CONTACT_SHADOW_WIDTH),
+    new THREE.PlaneGeometry(CONTACT_SHADOW_WIDTH, CONTACT_SHADOW_LENGTH),
     new THREE.MeshBasicMaterial({
       map: createContactShadowTexture(),
       transparent: true,
@@ -662,6 +662,7 @@ interface CeilingBuild {
 }
 
 function buildCeiling(): CeilingBuild {
+  RectAreaLightUniformsLib.init()
   const group = new THREE.Group()
   group.name = 'ceiling'
   const disposables: Disposable[] = []
@@ -764,6 +765,15 @@ function buildCeiling(): CeilingBuild {
   }
   environmentObjects.push(carSpots)
 
+  // Broad studio sources describe the curved sheet metal with a continuous highlight instead
+  // of the tiny, overexposed points from spotlights alone. No visible card blocks the camera.
+  for (const side of [-1, 1]) {
+    const softFill = new THREE.RectAreaLight(side < 0 ? 0xfff4e5 : 0xe5eeff, side < 0 ? 6 : 4, 160, 55)
+    softFill.position.set(side * 115, 90, CAR_CENTER[2])
+    softFill.lookAt(CAR_CENTER[0], 27, CAR_CENTER[2])
+    carSpots.add(softFill)
+  }
+
   group.add(ceiling, softboxes, canLights, carSpots)
 
   return { group, environmentObjects, spotLights, dispose: () => disposeAll(disposables) }
@@ -778,7 +788,7 @@ interface PropsBuild {
   dispose(): void
 }
 
-const DISPLAY_STAND_POSITION: readonly [number, number, number] = [-160, 0, 140]
+const DISPLAY_STAND_POSITION: readonly [number, number, number] = [-275, 0, -225]
 const TOOL_CABINET_POSITION: readonly [number, number, number] = [330, 0, -60]
 const LOUNGE_POSITION: readonly [number, number, number] = [-320, 0, 40]
 const TIRE_RACK_POSITION: readonly [number, number, number] = [200, 0, -340]

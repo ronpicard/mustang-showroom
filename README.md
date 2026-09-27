@@ -8,6 +8,7 @@ There is no game and no scoring: it is a car to look at and take apart.
 
 - Orbit, pan-free, and zoom around the car on its turntable, or jump to fixed views (front, rear three-quarter, side, top, engine bay, interior, wheel).
 - Change the paint between the film car's charcoal and seven genuine 1969 Ford colours.
+- Inspect glossy clearcoat paint, lightly tinted glass, textured rubber and cabin materials, and rounded street tires with raised sidewall lettering. Broad studio fill lights show the body contours without washing out the chrome.
 - Open the hood, both doors and the trunk, individually or all at once.
 - Drag the explode slider to pull every panel, trim piece, wheel, chassis component and engine part apart along its own path, staggered so the outer panels move first.
 - Click any part of the car — inside or out, open or exploded — to select it, fly the camera to it, and read its name, group, description and specs in the side panel.

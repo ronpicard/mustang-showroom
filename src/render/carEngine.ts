@@ -320,14 +320,14 @@ function buildCarburetor(materials: CarMaterials): THREE.Group {
 function buildAirCleaner(materials: CarMaterials): THREE.Group {
   const group = new THREE.Group()
   const radius = AIR_CLEANER_DIAMETER / 2
-  const drumHeight = 3.5
+  const drumHeight = 2.2
   const drumBottomY = AIR_CLEANER_Y
 
   const housing = makeMesh(new THREE.CylinderGeometry(radius, radius, drumHeight, 32), materials.satinBlack)
   housing.position.set(0, drumBottomY + drumHeight / 2, AIR_CLEANER_Z)
   group.add(housing)
 
-  const lidHeight = 0.6
+  const lidHeight = 0.35
   const lid = makeMesh(new THREE.CylinderGeometry(radius + 0.2, radius + 0.2, lidHeight, 32), materials.chrome)
   lid.position.set(0, drumBottomY + drumHeight + lidHeight / 2, AIR_CLEANER_Z)
   group.add(lid)
@@ -342,6 +342,8 @@ function buildAirCleaner(materials: CarMaterials): THREE.Group {
   group.add(wingBar)
 
   const foamRing = makeMesh(new THREE.TorusGeometry(radius - 0.3, 0.5, 10, 32), materials.rubber)
+  foamRing.name = 'airCleanerSeal'
+  foamRing.rotation.x = Math.PI / 2
   foamRing.position.set(0, drumBottomY + drumHeight - 0.2, AIR_CLEANER_Z)
   group.add(foamRing)
 
@@ -389,7 +391,7 @@ function buildRadiator(materials: CarMaterials): THREE.Group {
   }
   group.add(makeMesh(mergedFrom(finTemplate, finPlacements), materials.aluminium))
 
-  const tankHeight = 4
+  const tankHeight = 1.2
   const tankTemplate = new RoundedBoxGeometry(coreWidth + 2, tankHeight, RADIATOR_THICKNESS + 1, 1, 0.8)
   const tanks = mergedFrom(tankTemplate, [
     { position: new THREE.Vector3(0, RADIATOR_BOTTOM_Y - tankHeight / 2, RADIATOR_Z) },
@@ -397,8 +399,8 @@ function buildRadiator(materials: CarMaterials): THREE.Group {
   ])
   group.add(makeMesh(tanks, materials.aluminium))
 
-  const cap = makeMesh(new THREE.CylinderGeometry(1.6, 1.6, 1.2, 16), materials.chrome)
-  cap.position.set(0, RADIATOR_TOP_Y + tankHeight + 0.5, RADIATOR_Z)
+  const cap = makeMesh(new THREE.CylinderGeometry(1.2, 1.2, 0.55, 16), materials.chrome)
+  cap.position.set(0, RADIATOR_TOP_Y + tankHeight + 0.275, RADIATOR_Z)
   group.add(cap)
 
   const upperHose = makeMesh(
