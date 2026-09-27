@@ -51,7 +51,7 @@ The showroom models a 1969 Ford Mustang SportsRoof (fastback) from its published
 ## Tech stack
 
 - React 19 and TypeScript (strict) for the toolbar, parts, info and about panels
-- Plain three.js for the showroom, the car and every material: physically based paint with clearcoat, chrome, glass and a reflective floor, lit by long soft light panels and bloom on the fixtures
+- Plain three.js for the showroom, the car and every material: physically based paint with clearcoat, chrome, glass and a reflective floor, lit by long soft light panels and wall lightboxes, with ambient occlusion and bloom on the fixtures
 - The car is built in code, no 3D model: its geometry is generated from named dimensions. The engine plays four short field recordings (start, idle loop, two rev blips, see [Sound credits](#sound-credits)) pitch-shifted through Web Audio to follow an rpm model; if they fail to load, the same model drives a V8 synthesised at start-up as looping exhaust-pulse waveforms (a cross-plane firing order through two pipe resonators). The latch, explode and light sounds are synthesised
 - Vite for building and development
 - Node's built-in test runner (`node:test`), no separate test framework

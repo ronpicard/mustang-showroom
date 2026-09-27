@@ -21,7 +21,7 @@ import * as THREE from 'three'
 import { Reflector } from 'three/examples/jsm/objects/Reflector.js'
 import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
-import { CAR_CENTER, TURNTABLE_HEIGHT, TURNTABLE_RADIUS } from '../car/dimensions.ts'
+import { CAR_CENTER, TURNTABLE_HEIGHT, TURNTABLE_RADIUS, WHEEL_CENTERS } from '../car/dimensions.ts'
 
 export interface Showroom {
   /** Everything in the room. */
@@ -144,6 +144,14 @@ const STRIP_SPACING = 48
 const STRIP_COUNT = 12
 const STRIP_INTENSITY = 2
 
+/** Broad backlit lightboxes on each side wall: wide, warm emissive panels beyond the LED strips
+ * that read in the paint's highlights and in the floor's mirror reflection. */
+const WALL_LIGHTBOX_LENGTH = 420
+const WALL_LIGHTBOX_HEIGHT = 30
+const WALL_LIGHTBOX_Y = 58
+const WALL_LIGHTBOX_INTENSITY = 1.5
+const WALL_LIGHTBOX_COLOR = 0xfff7ec
+
 /** Chrome-framed showcase glass on each side wall (optional per spec; kept small and cheap). */
 const SHOWCASE_WIDTH = 60
 const SHOWCASE_HEIGHT = 80
@@ -195,6 +203,18 @@ const CAR_SPOT_DECAY = 1.4
 const CAR_SPOT_ANGLE = 0.5
 const CAR_SPOT_PENUMBRA = 0.55
 
+/** RectAreaLight companions to the wall lightboxes below (same footprint as `WALL_LIGHTBOX_*`),
+ * so the panels the camera sees glowing also throw light onto the car. */
+const WALL_LIGHT_INTENSITY = 3.2
+/** A single cool rim light on the back wall, behind the car, to separate its silhouette from the
+ * warm key/fill lighting above. */
+const RIM_LIGHT_COLOR = 0xdde8ff
+const RIM_LIGHT_INTENSITY = 2
+const RIM_LIGHT_WIDTH = 240
+const RIM_LIGHT_HEIGHT = 40
+const RIM_LIGHT_Y = 72
+const RIM_LIGHT_TARGET_Y = 30
+
 const HEMI_SKY_COLOR = 0x3a3d44
 const HEMI_GROUND_COLOR = 0x0a0a0c
 const HEMI_INTENSITY = 0.35
@@ -211,6 +231,13 @@ const CONTACT_SHADOW_WIDTH = 92
 const CONTACT_SHADOW_OPACITY = 0.7
 const CONTACT_SHADOW_LIFT = 0.35
 const CONTACT_SHADOW_TEXTURE_SIZE = 256
+
+/** Small radial-gradient patches directly under each tyre's contact point: tighter and darker
+ * than the broad `contactShadow` above so the tread reads grounded even where that shadow has
+ * already faded toward its edges. */
+const TYRE_PATCH_WIDTH = 13
+const TYRE_PATCH_LENGTH = 15
+const TYRE_PATCH_OPACITY = 0.9
 
 const LED_RING_RADIUS = TURNTABLE_RADIUS - 3
 const LED_RING_TUBE_RADIUS = 0.4
@@ -344,6 +371,13 @@ function buildFloor(): FloorBuild {
   const hiddenFromReflection: THREE.Object3D[] = []
   const renderReflection = reflector.onBeforeRender
   reflector.onBeforeRender = function (this: THREE.Mesh, ...args: Parameters<THREE.Mesh['onBeforeRender']>) {
+    // Engine.ts's GTAO pass renders the whole scene twice more per frame with `scene.overrideMaterial`
+    // set (once for normals, once for depth). Re-running the mirror's own sub-render during those
+    // passes would draw its capture with the override material rather than the mirror's real
+    // content, so skip the reflection update entirely and leave the mirror showing its last real
+    // frame instead.
+    const scene = args[1]
+    if (scene.overrideMaterial) return
     const shown = hiddenFromReflection.filter((object) => object.visible)
     for (const object of shown) object.visible = false
     try {
@@ -479,6 +513,28 @@ function buildTurntable(): TurntableBuild {
   contactShadow.renderOrder = 1
   turntable.add(contactShadow)
 
+  // Four small tyre contact patches, one per wheel, sharing a single texture/geometry/material
+  // instance since all four are identical apart from position.
+  const tyrePatchTexture = createContactShadowTexture()
+  const tyrePatchGeometry = new THREE.PlaneGeometry(TYRE_PATCH_WIDTH, TYRE_PATCH_LENGTH)
+  const tyrePatchMaterial = new THREE.MeshBasicMaterial({
+    map: tyrePatchTexture,
+    transparent: true,
+    opacity: TYRE_PATCH_OPACITY,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+  })
+  for (const [wheelX, , wheelZ] of Object.values(WHEEL_CENTERS)) {
+    const patch = new THREE.Mesh(tyrePatchGeometry, tyrePatchMaterial)
+    patch.rotation.x = -Math.PI / 2
+    patch.position.set(CAR_CENTER[0] + wheelX, TURNTABLE_HEIGHT + CONTACT_SHADOW_LIFT + 0.05, CAR_CENTER[2] + wheelZ)
+    patch.renderOrder = 2
+    patch.name = 'tyreContactPatch'
+    turntable.add(patch)
+  }
+
   const ledMaterial = new THREE.MeshStandardMaterial({
     color: 0x0a0a0c,
     emissive: LED_COLOR,
@@ -503,6 +559,9 @@ function buildTurntable(): TurntableBuild {
       edgeMaterial.dispose()
       ledGeometry.dispose()
       ledMaterial.dispose()
+      tyrePatchGeometry.dispose()
+      tyrePatchMaterial.dispose()
+      tyrePatchTexture.dispose()
     },
   }
 }
@@ -616,6 +675,32 @@ function buildWalls(): WallsBuild {
   }
   environmentObjects.push(strips)
 
+  // Broad backlit lightboxes on each side wall: wide, dim emissive panels that add a soft glow
+  // beyond the LED strips, visible in the paint's environment reflections and the floor mirror.
+  const wallLightboxGeometry = new THREE.PlaneGeometry(WALL_LIGHTBOX_LENGTH, WALL_LIGHTBOX_HEIGHT)
+  const wallLightboxMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    emissive: WALL_LIGHTBOX_COLOR,
+    emissiveIntensity: WALL_LIGHTBOX_INTENSITY,
+    roughness: 1,
+    side: THREE.FrontSide,
+  })
+  const wallLightboxFrameGeometry = buildFlatFrameGeometry(WALL_LIGHTBOX_LENGTH, WALL_LIGHTBOX_HEIGHT, 2)
+  const wallLightboxFrameMaterial = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.6 })
+  disposables.push(wallLightboxGeometry, wallLightboxMaterial, wallLightboxFrameGeometry, wallLightboxFrameMaterial)
+  const wallLightboxes = new THREE.Group()
+  wallLightboxes.name = 'wallLightboxes'
+  for (const side of [-1, 1]) {
+    const panel = new THREE.Mesh(wallLightboxGeometry, wallLightboxMaterial)
+    const frame = new THREE.Mesh(wallLightboxFrameGeometry, wallLightboxFrameMaterial)
+    panel.position.set(side * (ROOM_HALF - 0.8), WALL_LIGHTBOX_Y, CAR_CENTER[2])
+    panel.rotation.y = -side * (Math.PI / 2)
+    frame.position.copy(panel.position)
+    frame.rotation.copy(panel.rotation)
+    wallLightboxes.add(panel, frame)
+  }
+  environmentObjects.push(wallLightboxes)
+
   // Small chrome-framed dark-glass showcases on each side wall.
   const showcaseGlassGeometry = new THREE.PlaneGeometry(SHOWCASE_WIDTH, SHOWCASE_HEIGHT)
   const showcaseGlassMaterial = new THREE.MeshStandardMaterial({
@@ -643,7 +728,7 @@ function buildWalls(): WallsBuild {
     showcases.add(glass, frame)
   }
 
-  group.add(backWall, slats, leftWall, rightWall, frontWall, signage, strips, showcases)
+  group.add(backWall, slats, leftWall, rightWall, frontWall, signage, strips, wallLightboxes, showcases)
 
   return {
     group,
@@ -812,6 +897,27 @@ function buildCeiling(): CeilingBuild {
     softFill.lookAt(CAR_CENTER[0], 27, CAR_CENTER[2])
     carSpots.add(softFill)
   }
+
+  // RectAreaLight companions to the wall lightboxes: the panels the camera sees glowing also
+  // throw broad light across the car from each side.
+  for (const side of [-1, 1]) {
+    const wallLight = new THREE.RectAreaLight(
+      WALL_LIGHTBOX_COLOR,
+      WALL_LIGHT_INTENSITY,
+      WALL_LIGHTBOX_LENGTH,
+      WALL_LIGHTBOX_HEIGHT,
+    )
+    wallLight.position.set(side * (ROOM_HALF - 2), WALL_LIGHTBOX_Y, CAR_CENTER[2])
+    wallLight.lookAt(CAR_CENTER[0], 24, CAR_CENTER[2])
+    carSpots.add(wallLight)
+  }
+
+  // A single cool rim light on the back wall to separate the car's silhouette from the warm
+  // key/fill lighting above.
+  const rimLight = new THREE.RectAreaLight(RIM_LIGHT_COLOR, RIM_LIGHT_INTENSITY, RIM_LIGHT_WIDTH, RIM_LIGHT_HEIGHT)
+  rimLight.position.set(CAR_CENTER[0], RIM_LIGHT_Y, -ROOM_HALF + 2)
+  rimLight.lookAt(CAR_CENTER[0], RIM_LIGHT_TARGET_Y, CAR_CENTER[2])
+  carSpots.add(rimLight)
 
   group.add(ceiling, softboxes, canLights, carSpots)
 

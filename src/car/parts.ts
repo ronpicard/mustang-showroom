@@ -319,6 +319,32 @@ const DRAFTS: readonly PartDraft[] = [
     focus: { direction: [-0.85, 0.3, -0.4], distanceFactor: 3 },
   },
   {
+    id: 'badges',
+    name: 'Badges and lettering',
+    group: 'exterior',
+    description:
+      'Chrome MUSTANG block letters run the width of the tail panel and repeat, smaller, along each front fender just above the side stripe. MACH 1 lettering sits on the quarters near the tail, announcing the trim level to anyone behind the car.',
+    specs: [
+      { label: 'Material', value: 'Chrome-plated' },
+      { label: 'Location', value: 'Tail panel, fenders, quarters' },
+    ],
+    explode: { direction: [0, 1, -0.3], distance: 20, order: 0.3 },
+    focus: { direction: FROM_LOW_REAR, distanceFactor: 3 },
+  },
+  {
+    id: 'rearLouvers',
+    name: 'Rear window slats',
+    group: 'exterior',
+    description:
+      'The SportSlats louvre was a period dealer-installed option that clipped over the fastback\'s sloped backlight, shading the rear seat from the sun. Eight satin-black slats stand just proud of the glass, angled open to admit light while blocking a straight-on view.',
+    specs: [
+      { label: 'Type', value: 'Bolt-on, satin black' },
+      { label: 'Option', value: 'SportSlats dealer accessory' },
+    ],
+    explode: { direction: [0, 0.7, -0.7], distance: 24, order: 0.15 },
+    focus: { direction: [-0.4, 0.6, -0.7] },
+  },
+  {
     id: 'mirrors',
     name: 'Racing mirrors',
     group: 'exterior',

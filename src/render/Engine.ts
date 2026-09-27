@@ -2,13 +2,14 @@
  * Builds the three.js scene, camera, renderer and simulation loop for the showroom canvas.
  * Everything created here (geometries, materials, textures, render targets, the renderer, the
  * composer, the DOM listeners) is disposed by `dispose()`. Mirrors the structure of
- * `roulette-royale/src/render/Engine.ts`: renderer/composer setup, quality steps that only step
- * down, a ResizeObserver, and a scene-capture environment map.
+ * `roulette-royale/src/render/Engine.ts`: renderer/composer setup, a GTAO ambient occlusion pass,
+ * quality steps that only step down, a ResizeObserver, and a scene-capture environment map.
  */
 
 import * as THREE from 'three'
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
+import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
@@ -77,12 +78,25 @@ const QUALITY_STEPS: readonly {
   bloom: boolean
   shadowMapSize: number
   reflections: boolean
+  ao: boolean
 }[] = [
-  { pixelRatio: 2, bloom: true, shadowMapSize: 2048, reflections: true },
-  { pixelRatio: 1.5, bloom: true, shadowMapSize: 2048, reflections: true },
-  { pixelRatio: 1, bloom: true, shadowMapSize: 1024, reflections: true },
-  { pixelRatio: 1, bloom: false, shadowMapSize: 1024, reflections: false },
+  { pixelRatio: 2, bloom: true, shadowMapSize: 2048, reflections: true, ao: true },
+  { pixelRatio: 1.5, bloom: true, shadowMapSize: 2048, reflections: true, ao: true },
+  { pixelRatio: 1, bloom: true, shadowMapSize: 1024, reflections: true, ao: false },
+  { pixelRatio: 1, bloom: false, shadowMapSize: 1024, reflections: false, ao: false },
 ]
+/** GTAO sample radius, in inches; the scene is modelled in inches and the car is ~71 in wide. */
+const AO_RADIUS = 8
+/** GTAO falloff exponent on sample distance; 1 keeps the default linear falloff. */
+const AO_DISTANCE_EXPONENT = 1
+/** GTAO thickness heuristic for thin occluders (in world units). */
+const AO_THICKNESS = 1
+/** GTAO world-space sample radius scale. */
+const AO_SCALE = 1
+/** GTAO samples per pixel; higher is smoother but costs more per frame. */
+const AO_SAMPLES = 16
+/** How strongly the denoised AO term darkens the beauty pass, 0-1. */
+const AO_BLEND_INTENSITY = 0.85
 /** Touch screens are dense and their GPUs are usually weaker, so they start one step down. */
 const TOUCH_START_QUALITY = 1
 /** A frame slower than this (about 26 fps) counts toward stepping down. */
@@ -333,10 +347,24 @@ export function createEngine(canvas: HTMLCanvasElement, events: EngineEvents): E
   const composerTarget = new THREE.WebGLRenderTarget(1, 1, { samples: COMPOSER_MSAA_SAMPLES, type: THREE.HalfFloatType })
   const composer = new EffectComposer(renderer, composerTarget)
   const renderPass = new RenderPass(scene, camera)
+  const gtaoPass = new GTAOPass(scene, camera, 1, 1)
+  gtaoPass.updateGtaoMaterial({
+    radius: AO_RADIUS,
+    distanceExponent: AO_DISTANCE_EXPONENT,
+    thickness: AO_THICKNESS,
+    scale: AO_SCALE,
+    samples: AO_SAMPLES,
+    distanceFallOff: 1,
+    screenSpaceRadius: false,
+  })
+  gtaoPass.blendIntensity = AO_BLEND_INTENSITY
+  gtaoPass.output = GTAOPass.OUTPUT.Default
+  gtaoPass.enabled = QUALITY_STEPS[qualityStep]!.ao
   const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), BLOOM_STRENGTH, BLOOM_RADIUS, BLOOM_THRESHOLD)
   const outputPass = new OutputPass()
   bloomPass.enabled = QUALITY_STEPS[qualityStep]!.bloom
   composer.addPass(renderPass)
+  composer.addPass(gtaoPass)
   composer.addPass(bloomPass)
   composer.addPass(outputPass)
 
@@ -888,6 +916,7 @@ export function createEngine(canvas: HTMLCanvasElement, events: EngineEvents): E
     renderer.setPixelRatio(pixelRatio)
     composer.setPixelRatio(pixelRatio)
     bloomPass.enabled = step.bloom
+    gtaoPass.enabled = step.ao
     showroom.setReflections(step.reflections)
     handleResize()
   }
@@ -1026,6 +1055,7 @@ export function createEngine(canvas: HTMLCanvasElement, events: EngineEvents): E
       showroom.dispose()
 
       renderPass.dispose()
+      gtaoPass.dispose()
       bloomPass.dispose()
       outputPass.dispose()
       composer.dispose()

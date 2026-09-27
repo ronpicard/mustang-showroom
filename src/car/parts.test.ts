@@ -34,6 +34,8 @@ const ALL_PART_IDS: readonly PartId[] = [
   'hoodScoop',
   'hoodPins',
   'sideScoops',
+  'badges',
+  'rearLouvers',
   'mirrors',
   'doorHandles',
   'fuelCap',

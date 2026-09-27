@@ -102,6 +102,25 @@ const TURN_SIGNAL_LENS_STANDOFF = 0.5
 const TURN_SIGNAL_BACKING_INSET = 1
 const TURN_SIGNAL_BEZEL_WIDTH = 1.6
 
+/** 1969 Mach 1 pedestal rear spoiler: the blade's span, tip to tip. */
+const SPOILER_SPAN = 62
+/** Blade chord (leading to trailing edge) at every span station. */
+const SPOILER_CHORD = 6
+/** Z of the blade's leading edge; the trailing edge sits `SPOILER_CHORD` further aft. */
+const SPOILER_LEADING_Z = -80.5
+/** Height of the blade's underside above the deck at the spoiler's centreline (x = 0). */
+const SPOILER_HEIGHT = 4.4
+/** Peak camber of the section's top surface above its underside baseline, at 35% chord. */
+const SPOILER_CAMBER = 0.7
+/** Peak thickness of the section, at 30% chord; it tapers to a thin trailing edge. */
+const SPOILER_THICKNESS = 1
+/** How far the blade's underside droops down at the tips relative to the centreline. */
+const SPOILER_TIP_DROOP = 0.6
+/** X of each stanchion's centreline. */
+const SPOILER_STANCHION_X = 21.5
+/** Height of each end plate box, bottom flush with the blade's underside at the tip. */
+const SPOILER_END_PLATE_HEIGHT = 2.6
+
 // -------------------------------------------------------------------------------------------
 // Small shared helpers
 // -------------------------------------------------------------------------------------------
@@ -473,6 +492,122 @@ function buildCowl(materials: CarMaterials): PartBuild {
   return { id: 'cowl', objects: [g] }
 }
 
+/**
+ * One closed cross-section of the rear spoiler blade at span position `x`: a cambered,
+ * rounded-leading-edge aerofoil loop of 20 points (19 distinct, the first repeated at the end so
+ * `loft` closes the skin). `s` runs 0 (leading edge) to 1 (trailing edge) along the chord; the
+ * bottom carries only a small share of the thickness so it reads as nearly flat, the top the rest.
+ */
+function spoilerBladeRow(x: number): THREE.Vector3[] {
+  const halfSpan = SPOILER_SPAN / 2
+  const droop = SPOILER_TIP_DROOP * (1 - Math.cos((Math.PI / 2) * (x / halfSpan)))
+  const underside = DECK_Y + SPOILER_HEIGHT - droop
+
+  const thicknessPeakS = 0.3
+  const trailingThickness = 0.18
+  const thicknessAt = (s: number): number =>
+    s <= thicknessPeakS
+      ? SPOILER_THICKNESS * Math.sin((s / thicknessPeakS) * (Math.PI / 2))
+      : SPOILER_THICKNESS - (SPOILER_THICKNESS - trailingThickness) * ((s - thicknessPeakS) / (1 - thicknessPeakS))
+  const leadingEdgeRound = 0.12
+  const thicknessRounded = thicknessAt(leadingEdgeRound)
+  const thickness = (s: number): number => {
+    if (s > leadingEdgeRound) return thicknessAt(s)
+    const u = (leadingEdgeRound - s) / leadingEdgeRound
+    return thicknessRounded * Math.sqrt(Math.max(0, 1 - u * u))
+  }
+  const camberPeakS = 0.35
+  const camber = (s: number): number =>
+    s <= camberPeakS
+      ? SPOILER_CAMBER * Math.sin((s / camberPeakS) * (Math.PI / 2))
+      : SPOILER_CAMBER * Math.cos(((s - camberPeakS) / (1 - camberPeakS)) * (Math.PI / 2))
+  const zAt = (s: number): number => SPOILER_LEADING_Z - s * SPOILER_CHORD
+  const top = (s: number): THREE.Vector3 => new THREE.Vector3(x, underside + camber(s) + thickness(s) * 0.85, zAt(s))
+  const bottom = (s: number): THREE.Vector3 => new THREE.Vector3(x, underside + camber(s) - thickness(s) * 0.15, zAt(s))
+
+  const topPoints = Array.from({ length: 10 }, (_, i) => top(i / 9))
+  const bottomPoints = Array.from({ length: 9 }, (_, i) => bottom(1 - (i + 1) / 10))
+  return [...topPoints, ...bottomPoints, topPoints[0]!.clone()]
+}
+
+/** Collapses a closed loop to its centroid (same point count), for a flat `loft` end cap. */
+function collapseToCentroid(row: readonly THREE.Vector3[]): THREE.Vector3[] {
+  const centroid = row.reduce((sum, p) => sum.add(p), new THREE.Vector3()).divideScalar(row.length)
+  return row.map(() => centroid.clone())
+}
+
+/**
+ * One swept pedestal from the deck to the blade's underside at span position `x`: a tapering
+ * rectangular mast (base 1.3 × 2.6 in xz, top 1 × 2.2), built as a small `loft` with 6 rows along
+ * its height, plus a foot pad bonded to the deck under it.
+ */
+function spoilerStanchion(x: number, topY: number): THREE.BufferGeometry {
+  const baseY = DECK_Y - 0.2
+  const baseZ = -80
+  const topZ = -83.5
+  const rowCount = 6
+  const rows = Array.from({ length: rowCount }, (_, i) => {
+    const t = i / (rowCount - 1)
+    const y = baseY + (topY - baseY) * t
+    const halfX = 0.65 + (0.5 - 0.65) * t
+    const halfZ = 1.3 + (1.1 - 1.3) * t
+    const z = baseZ + (topZ - baseZ) * t
+    return [
+      new THREE.Vector3(x - halfX, y, z - halfZ),
+      new THREE.Vector3(x + halfX, y, z - halfZ),
+      new THREE.Vector3(x + halfX, y, z + halfZ),
+      new THREE.Vector3(x - halfX, y, z + halfZ),
+      new THREE.Vector3(x - halfX, y, z - halfZ),
+    ]
+  })
+  const firstRow = rows[0]!
+  const lastRow = rows[rowCount - 1]!
+  const mast = mergeGeometries([loft(rows), loft([firstRow, collapseToCentroid(firstRow)]), loft([lastRow, collapseToCentroid(lastRow)])])
+  const footPad = new THREE.BoxGeometry(2.4, 0.25, 3.6)
+  // Flush with the mast's base footprint on its forward edge, extending back for support.
+  footPad.translate(x, baseY + 0.125, baseZ + 1.3 - 1.8)
+  return mergeGeometries([mast, footPad])
+}
+
+/**
+ * Film-inspired 1969 Mach 1 pedestal rear spoiler: a cambered aerofoil blade with end plates,
+ * carried on two swept stanchions, replacing the old flat shelf wing.
+ */
+function buildRearSpoiler(materials: CarMaterials): THREE.Group {
+  const wing = new THREE.Group()
+  wing.name = 'rearSpoiler'
+
+  const halfSpan = SPOILER_SPAN / 2
+  const stationCount = 33
+  const stations = Array.from({ length: stationCount }, (_, i) => -halfSpan + (i * SPOILER_SPAN) / (stationCount - 1))
+  const bladeRows = stations.map((x) => spoilerBladeRow(x))
+  const firstRow = bladeRows[0]!
+  const lastRow = bladeRows[bladeRows.length - 1]!
+  const chordCenterZ = SPOILER_LEADING_Z - SPOILER_CHORD / 2
+  const endPlates = [firstRow, lastRow].map((row) => {
+    const underside = row.reduce((min, p) => Math.min(min, p.y), Infinity)
+    const geo = new THREE.BoxGeometry(0.28, SPOILER_END_PLATE_HEIGHT, 6.4)
+    geo.translate(row[0]!.x, underside + SPOILER_END_PLATE_HEIGHT / 2, chordCenterZ)
+    return geo
+  })
+  const blade = mesh(
+    mergeGeometries([
+      loft(bladeRows, true),
+      loft([firstRow, collapseToCentroid(firstRow)]),
+      loft([lastRow, collapseToCentroid(lastRow)]),
+      ...endPlates,
+    ]),
+    materials.satinBlack,
+  )
+
+  const stanchionTopY = (x: number): number => spoilerBladeRow(x).reduce((min, p) => Math.min(min, p.y), Infinity)
+  const stanchions = [-SPOILER_STANCHION_X, SPOILER_STANCHION_X].map((x) => spoilerStanchion(x, stanchionTopY(x)))
+  const pedestals = mesh(mergeGeometries(stanchions), materials.satinBlack)
+
+  wing.add(blade, pedestals)
+  return wing
+}
+
 function buildTrunkLid(materials: CarMaterials): PartBuild {
   const ZSEG = 22
   const XSEG = 22
@@ -497,26 +632,7 @@ function buildTrunkLid(materials: CarMaterials): PartBuild {
   const g = new THREE.Group()
   g.add(outerMesh, innerMesh, rallyStripes(outerRows, materials))
   // Film-inspired rear wing: mounted to the lid so it opens and explodes with that panel.
-  const wing = new THREE.Group()
-  wing.name = 'rearSpoiler'
-  for (const x of [-17, 17]) {
-    const mount = mesh(new THREE.BoxGeometry(1.2, 3.4, 3.2), materials.satinBlack)
-    mount.position.set(x, DECK_Y + 1.4, -83)
-    wing.add(mount)
-  }
-  const wingRows = Array.from({ length: 9 }, (_, i) => {
-    const z = -79 - i
-    const t = i / 8
-    return Array.from({ length: 33 }, (_, j) => {
-      const u = j / 16 - 1
-      return new THREE.Vector3(30 * u, DECK_Y + 3.3 + 0.4 * Math.sin(Math.PI * t) - 0.25 * u * u, z)
-    })
-  })
-  const wingSkin = loft(wingRows)
-  wing.add(mesh(mergeGeometries([wingSkin, loft(wingRows.map((r) => dropped(r, 'y', 0.35)), true),
-    loft([wingRows[0], dropped(wingRows[0], 'y', 0.35)]),
-    loft([wingRows[8], dropped(wingRows[8], 'y', 0.35)])]), materials.satinBlack))
-  g.add(wing)
+  g.add(buildRearSpoiler(materials))
   g.name = 'trunkLid'
   tagPart(g, 'trunkLid')
   return { id: 'trunkLid', objects: [g] }

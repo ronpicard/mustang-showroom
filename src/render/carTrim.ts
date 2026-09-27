@@ -3,7 +3,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import type { CarMaterials } from './carMaterials.ts'
 import { tagPart, type PartBuild } from './partBuild.ts'
-import { stationAt } from './bodyProfile.ts'
+import { greenhouseAt, sectionHalfWidth, stationAt } from './bodyProfile.ts'
 import {
   BODY_HALF_WIDTH,
   BUMPER_CENTER_Y,
@@ -133,6 +133,53 @@ const HOOD_PIN_CABLE_SAG = 1.2
 /** Quarter (side) scoop stand-off and how far its dark opening is inset from the blister's edge. */
 const SIDE_SCOOP_PROUD = 1.2
 const SIDE_SCOOP_OPENING_INSET = 0.5
+
+/** Block-letter font grid (5 wide x 7 tall unit cells) and the default gutter between letters. */
+const BLOCK_LETTER_GRID_COLUMNS = 5
+const BLOCK_LETTER_GRID_ROWS = 7
+const BLOCK_LETTER_DEFAULT_GAP = 1.5
+
+/** Tail-panel MUSTANG lettering: size, height and the width it is spread to spread across the panel. */
+const BADGE_TAIL_LETTER_HEIGHT = 1.7
+const BADGE_TAIL_LETTER_DEPTH = 0.25
+const BADGE_TAIL_Y = 36.3
+const BADGE_TAIL_SPAN = 46
+/** Fender and quarter script size, height, and how far its back face stands off the body skin. */
+const BADGE_SIDE_LETTER_HEIGHT = 1.15
+const BADGE_SIDE_LETTER_DEPTH = 0.18
+const BADGE_SIDE_Y = 17.2
+const BADGE_STANDOFF = 0.05
+/** Fender MUSTANG script runs nose to tail between these two z stations. */
+const BADGE_FENDER_Z_FRONT = 35.5
+const BADGE_FENDER_Z_REAR = 20.5
+/** Quarter MACH 1 script is centred here, spaced like the fender script. */
+const BADGE_QUARTER_CENTER_Z = -76
+const BADGE_SIDE_LETTER_STEP = 2.5
+
+/** Rear window slats (SportSlats): count, span along the glass, and each slat's own proportions. */
+const LOUVER_COUNT = 8
+const LOUVER_Z_FRONT = -27
+const LOUVER_Z_REAR = -59
+const LOUVER_WIDTH_INSET = 1.6
+const LOUVER_THICKNESS = 0.22
+const LOUVER_CHORD = 2.6
+/** How much more open each slat is pitched than the glass itself, so the leading edge lifts clear. */
+const LOUVER_PITCH_OPEN = THREE.MathUtils.degToRad(12)
+/** How far a slat sits above the glass surface along the surface normal. */
+const LOUVER_STANDOFF = 1.3
+/** The two side rails bracketing the slats: cross-section and how far in from the glass edge. */
+const LOUVER_RAIL_SIZE = 0.5
+const LOUVER_RAIL_INSET = 1.2
+const LOUVER_RAIL_Z_FRONT = -26
+const LOUVER_RAIL_Z_REAR = -60
+
+/** Hood-scoop rear indicator lenses: size and where they sit on the scoop's narrow rear face. */
+const SCOOP_INDICATOR_WIDTH = 1.6
+const SCOOP_INDICATOR_HEIGHT = 0.55
+const SCOOP_INDICATOR_DEPTH = 0.2
+const SCOOP_INDICATOR_X = 3.2
+const SCOOP_INDICATOR_Z_OFFSET = 2
+const SCOOP_INDICATOR_Y_LIFT = 0.55
 
 /** Bullet mirror proportions. */
 const MIRROR_BODY_LENGTH = 5.5
@@ -714,6 +761,18 @@ function buildHoodScoop(materials: CarMaterials): THREE.Group {
   const lip = finish(new THREE.Mesh(new THREE.TubeGeometry(lipPath, 80, HOOD_SCOOP_LIP_RADIUS, 6, true), materials.satinBlack))
   group.add(lip)
 
+  // A pair of amber indicator lenses set into the scoop's narrow rear face, over the hood skin.
+  const indicatorZ = HOOD_SCOOP_REAR_Z + SCOOP_INDICATOR_Z_OFFSET
+  const indicatorY = hoodSurfaceY(indicatorZ) + SCOOP_INDICATOR_Y_LIFT
+  for (const sign of [-1, 1] as const) {
+    const indicator = finish(
+      new THREE.Mesh(new THREE.BoxGeometry(SCOOP_INDICATOR_WIDTH, SCOOP_INDICATOR_HEIGHT, SCOOP_INDICATOR_DEPTH), materials.amberLens),
+      false,
+    )
+    indicator.position.set(sign * SCOOP_INDICATOR_X, indicatorY, indicatorZ)
+    group.add(indicator)
+  }
+
   return group
 }
 
@@ -781,6 +840,215 @@ function buildSideScoop(materials: CarMaterials, sign: number): THREE.Group {
   )
   opening.position.set(sign * (SIDE_SCOOP_PROUD / 2), 0, SIDE_SCOOP_LENGTH / 2 - 0.15)
   group.add(opening)
+
+  return group
+}
+
+// -------------------------------------------------------------------------------------------
+// Badges and lettering: a local stroke font plus the chrome MUSTANG and MACH 1 lettering.
+// -------------------------------------------------------------------------------------------
+
+/**
+ * Each glyph as seven rows of five characters, top row first, 'X' filled and '.' empty, on the
+ * `BLOCK_LETTER_GRID_COLUMNS` x `BLOCK_LETTER_GRID_ROWS` unit grid `buildGlyphMesh` reads.
+ */
+const BLOCK_LETTER_FONT: Readonly<Record<string, readonly string[]>> = {
+  M: ['X...X', 'XX.XX', 'X.X.X', 'X...X', 'X...X', 'X...X', 'X...X'],
+  U: ['X...X', 'X...X', 'X...X', 'X...X', 'X...X', 'X...X', '.XXX.'],
+  S: ['.XXXX', 'X....', 'X....', '.XXX.', '....X', '....X', 'XXXX.'],
+  T: ['XXXXX', '..X..', '..X..', '..X..', '..X..', '..X..', '..X..'],
+  A: ['..X..', '.X.X.', 'X...X', 'X...X', 'XXXXX', 'X...X', 'X...X'],
+  N: ['X...X', 'XX..X', 'X.X.X', 'X..XX', 'X...X', 'X...X', 'X...X'],
+  G: ['.XXX.', 'X...X', 'X....', 'X.XXX', 'X...X', 'X...X', '.XXX.'],
+  C: ['.XXX.', 'X...X', 'X....', 'X....', 'X....', 'X...X', '.XXX.'],
+  H: ['X...X', 'X...X', 'X...X', 'XXXXX', 'X...X', 'X...X', 'X...X'],
+  '1': ['..X..', '.XX..', '..X..', '..X..', '..X..', '..X..', '.XXX.'],
+  ' ': ['.....', '.....', '.....', '.....', '.....', '.....', '.....'],
+}
+
+/**
+ * One glyph's filled cells as `cellSize`-square boxes merged into a single mesh, centred at
+ * x = 0, y = 0, extruding toward +Z by `depth` (front face at z = depth, back face at z = 0).
+ * An unknown character (or a space) falls back to a blank cell so callers never see a hole.
+ */
+function buildGlyphMesh(char: string, cellSize: number, depth: number, material: THREE.Material): THREE.Mesh {
+  const rows = BLOCK_LETTER_FONT[char.toUpperCase()] ?? BLOCK_LETTER_FONT[' ']!
+  const cells: THREE.BufferGeometry[] = []
+  for (let row = 0; row < BLOCK_LETTER_GRID_ROWS; row++) {
+    const line = rows[row]!
+    for (let col = 0; col < BLOCK_LETTER_GRID_COLUMNS; col++) {
+      if (line[col] !== 'X') continue
+      const gridY = BLOCK_LETTER_GRID_ROWS - 1 - row
+      const cell = new THREE.BoxGeometry(cellSize, cellSize, depth)
+      cell.translate(
+        (col - (BLOCK_LETTER_GRID_COLUMNS - 1) / 2) * cellSize,
+        (gridY - (BLOCK_LETTER_GRID_ROWS - 1) / 2) * cellSize,
+        depth / 2,
+      )
+      cells.push(cell)
+    }
+  }
+  const geometry = cells.length > 0 ? mergeGeometries(cells, false) : new THREE.BoxGeometry(1e-4, 1e-4, 1e-4)
+  return new THREE.Mesh(geometry, material)
+}
+
+/**
+ * `text` as chrome/satin block letters on the 5x7 `BLOCK_LETTER_FONT` grid, laid left to right
+ * along +X with a `gap`-unit gutter (grid units, like the glyph's own width) between letters and
+ * centred on x = 0. See `buildGlyphMesh` for the per-letter geometry and facing.
+ */
+function buildBlockLetters(
+  text: string,
+  letterHeight: number,
+  depth: number,
+  material: THREE.Material,
+  gap: number = BLOCK_LETTER_DEFAULT_GAP,
+): THREE.Group {
+  const group = new THREE.Group()
+  const cellSize = letterHeight / BLOCK_LETTER_GRID_ROWS
+  const glyphWidth = BLOCK_LETTER_GRID_COLUMNS * cellSize
+  const advance = glyphWidth + gap * cellSize
+  let cursor = 0
+  for (const char of text) {
+    const glyph = buildGlyphMesh(char, cellSize, depth, material)
+    glyph.position.x = cursor + glyphWidth / 2
+    group.add(glyph)
+    cursor += advance
+  }
+  const totalWidth = cursor - gap * cellSize
+  for (const glyph of group.children) glyph.position.x -= totalWidth / 2
+  return group
+}
+
+/**
+ * One word's letters placed individually along the curved body side rather than on a flat
+ * plane: letter `i` sits at its own z (evenly spaced from `zStart` to `zEnd`), its back face on
+ * the body skin (`sectionHalfWidth` at that z and `y`, plus `BADGE_STANDOFF`), rotated so its
+ * front face points outward (+X for the passenger side, -X for the driver side).
+ */
+function buildSideWord(
+  text: string,
+  side: -1 | 1,
+  zStart: number,
+  zEnd: number,
+  y: number,
+  letterHeight: number,
+  depth: number,
+  material: THREE.Material,
+): THREE.Group {
+  const group = new THREE.Group()
+  const cellSize = letterHeight / BLOCK_LETTER_GRID_ROWS
+  const count = text.length
+  for (let i = 0; i < count; i++) {
+    const t = count > 1 ? i / (count - 1) : 0
+    // A viewer outside the driver side sees the nose on their right, so the word runs rear to
+    // front there and front to rear on the passenger side; either way it reads left to right.
+    const z = side < 0 ? THREE.MathUtils.lerp(zEnd, zStart, t) : THREE.MathUtils.lerp(zStart, zEnd, t)
+    const glyph = buildGlyphMesh(text[i]!, cellSize, depth, material)
+    const halfWidth = sectionHalfWidth(stationAt(z), y, false)
+    glyph.position.set(side * (halfWidth + BADGE_STANDOFF), y, z)
+    glyph.rotation.y = side < 0 ? -Math.PI / 2 : Math.PI / 2
+    group.add(glyph)
+  }
+  return group
+}
+
+/**
+ * Chrome MUSTANG lettering on the tail panel and each front fender, and MACH 1 on each quarter:
+ * one group per location, gathered under a single `badges` group (`buildTrim` pushes it as the
+ * part's one object; see `carAssembly.ts`, which requires exactly one object for a part not in
+ * `MIRRORED_PARTS`).
+ */
+function buildBadges(materials: CarMaterials): THREE.Group {
+  const group = new THREE.Group()
+
+  const tailGap = (BADGE_TAIL_SPAN - 'MUSTANG'.length * (BADGE_TAIL_LETTER_HEIGHT / BLOCK_LETTER_GRID_ROWS) * BLOCK_LETTER_GRID_COLUMNS)
+    / ('MUSTANG'.length - 1) / (BADGE_TAIL_LETTER_HEIGHT / BLOCK_LETTER_GRID_ROWS)
+  const tail = buildBlockLetters('MUSTANG', BADGE_TAIL_LETTER_HEIGHT, BADGE_TAIL_LETTER_DEPTH, materials.chrome, tailGap)
+  // The front face already reads toward +Z; spin it around so it faces the tail (-Z) instead.
+  tail.rotation.y = Math.PI
+  tail.position.set(0, BADGE_TAIL_Y, TAIL_PANEL_FACE_Z - 0.05)
+  group.add(tail)
+
+  for (const side of [-1, 1] as const) {
+    group.add(buildSideWord('MUSTANG', side, BADGE_FENDER_Z_FRONT, BADGE_FENDER_Z_REAR, BADGE_SIDE_Y, BADGE_SIDE_LETTER_HEIGHT, BADGE_SIDE_LETTER_DEPTH, materials.chrome))
+  }
+
+  const quarterHalfSpan = (('MACH 1'.length - 1) * BADGE_SIDE_LETTER_STEP) / 2
+  for (const side of [-1, 1] as const) {
+    group.add(
+      buildSideWord(
+        'MACH 1',
+        side,
+        BADGE_QUARTER_CENTER_Z + quarterHalfSpan,
+        BADGE_QUARTER_CENTER_Z - quarterHalfSpan,
+        BADGE_SIDE_Y,
+        BADGE_SIDE_LETTER_HEIGHT,
+        BADGE_SIDE_LETTER_DEPTH,
+        materials.chrome,
+      ),
+    )
+  }
+
+  return group
+}
+
+// -------------------------------------------------------------------------------------------
+// Rear window slats (the SportSlats louvre)
+// -------------------------------------------------------------------------------------------
+
+/** The glass surface point (x = 0, at its half-width's y) at `z`, for the slope calculation below. */
+function glassSurfaceY(z: number): number {
+  return greenhouseAt(z).top[1]
+}
+
+/**
+ * Eight satin-black slats standing just proud of the fastback glass, each nearly parallel to the
+ * surface but pitched `LOUVER_PITCH_OPEN` further open so the leading (nose-ward) edge lifts
+ * clear, plus two side rails along the glass edges. The local slope is sampled a inch to either
+ * side of each slat's z with `glassSurfaceY` and turned into a surface-normal offset, so the
+ * whole assembly follows the glass's curve from the roof down to the deck.
+ */
+function buildRearLouvers(materials: CarMaterials): THREE.Group {
+  const group = new THREE.Group()
+
+  function slopeAt(z: number): { tangentAngle: number; normalY: number; normalZ: number } {
+    const dz = 2
+    const dy = glassSurfaceY(z + 1) - glassSurfaceY(z - 1)
+    const length = Math.hypot(dz, dy)
+    const tangent = { z: dz / length, y: dy / length }
+    // Perpendicular to the tangent, rotated toward +Y: points up and back, away from the car.
+    const normal = { z: -tangent.y, y: tangent.z }
+    return { tangentAngle: Math.atan2(tangent.y, tangent.z), normalY: normal.y, normalZ: normal.z }
+  }
+
+  for (let i = 0; i < LOUVER_COUNT; i++) {
+    const t = i / (LOUVER_COUNT - 1)
+    const z = THREE.MathUtils.lerp(LOUVER_Z_FRONT, LOUVER_Z_REAR, t)
+    const halfWidth = greenhouseAt(z).top[0] - LOUVER_WIDTH_INSET
+    const { tangentAngle, normalY, normalZ } = slopeAt(z)
+    const slat = finish(new THREE.Mesh(new THREE.BoxGeometry(halfWidth * 2, LOUVER_THICKNESS, LOUVER_CHORD), materials.satinBlack))
+    slat.rotation.x = -(tangentAngle + LOUVER_PITCH_OPEN)
+    slat.position.set(0, glassSurfaceY(z) + normalY * LOUVER_STANDOFF, z + normalZ * LOUVER_STANDOFF)
+    group.add(slat)
+  }
+
+  const railCenterZ = (LOUVER_RAIL_Z_FRONT + LOUVER_RAIL_Z_REAR) / 2
+  const railHalfWidth = greenhouseAt(railCenterZ).top[0] - LOUVER_RAIL_INSET
+  const railLength = Math.abs(LOUVER_RAIL_Z_FRONT - LOUVER_RAIL_Z_REAR)
+  const { tangentAngle: railAngle, normalY: railNormalY, normalZ: railNormalZ } = slopeAt(railCenterZ)
+  for (const sign of [-1, 1] as const) {
+    const rail = finish(
+      new THREE.Mesh(new THREE.BoxGeometry(LOUVER_RAIL_SIZE, LOUVER_RAIL_SIZE, railLength), materials.satinBlack),
+    )
+    rail.rotation.x = -railAngle
+    rail.position.set(
+      sign * railHalfWidth,
+      glassSurfaceY(railCenterZ) + railNormalY * LOUVER_STANDOFF,
+      railCenterZ + railNormalZ * LOUVER_STANDOFF,
+    )
+    group.add(rail)
+  }
 
   return group
 }
@@ -974,6 +1242,12 @@ export function buildTrim(materials: CarMaterials): PartBuild[] {
   const sideScoopRight = tagPart(buildSideScoop(materials, 1), 'sideScoops')
   sideScoopRight.position.set(BODY_HALF_WIDTH, SIDE_SCOOP_Y, SIDE_SCOOP_Z)
   parts.push({ id: 'sideScoops', objects: [sideScoopLeft, sideScoopRight] })
+
+  const badges = tagPart(buildBadges(materials), 'badges')
+  parts.push({ id: 'badges', objects: [badges] })
+
+  const rearLouvers = tagPart(buildRearLouvers(materials), 'rearLouvers')
+  parts.push({ id: 'rearLouvers', objects: [rearLouvers] })
 
   const mirrorLeft = tagPart(buildMirror(materials), 'mirrors')
   mirrorLeft.position.set(-MIRROR_X, MIRROR_Y, MIRROR_Z)

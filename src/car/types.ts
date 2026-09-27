@@ -50,6 +50,8 @@ export type PartId =
   | 'hoodScoop'
   | 'hoodPins'
   | 'sideScoops'
+  | 'badges'
+  | 'rearLouvers'
   | 'mirrors'
   | 'doorHandles'
   | 'fuelCap'

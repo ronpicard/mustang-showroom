@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import * as THREE from 'three'
-import { FRONT_AXLE_Z, HOOD_PIN_X, SIDE_STRIPE_BOTTOM_Y, SIDE_STRIPE_FRONT_Z, SIDE_STRIPE_REAR_Z, SIDE_STRIPE_TOP_Y, HOOD_PIN_Z, HOOD_SCOOP_REAR_Z, REAR_AXLE_Z, TAIL_CORNER_RADIUS, TAIL_HALF_WIDTH, TAIL_PANEL_FACE_Z, TAIL_PANEL_HALF_WIDTH, TAIL_Z, ROCKER_BOTTOM_Y, ROCKER_TOP_Y, TURN_SIGNAL_X, TURN_SIGNAL_Y, WHEEL_ARCH_CENTER_Y, WHEEL_ARCH_RADIUS } from '../car/dimensions.ts'
+import { DECK_Y, FRONT_AXLE_Z, HOOD_PIN_X, SIDE_STRIPE_BOTTOM_Y, SIDE_STRIPE_FRONT_Z, SIDE_STRIPE_REAR_Z, SIDE_STRIPE_TOP_Y, HOOD_PIN_Z, HOOD_SCOOP_REAR_Z, REAR_AXLE_Z, TAIL_CORNER_RADIUS, TAIL_HALF_WIDTH, TAIL_PANEL_FACE_Z, TAIL_PANEL_HALF_WIDTH, TAIL_Z, ROCKER_BOTTOM_Y, ROCKER_TOP_Y, TURN_SIGNAL_X, TURN_SIGNAL_Y, WHEEL_ARCH_CENTER_Y, WHEEL_ARCH_RADIUS } from '../car/dimensions.ts'
 import type { PartId } from '../car/types.ts'
 import { createCarAssembly } from './carAssembly.ts'
 import { stationAt } from './bodyProfile.ts'
@@ -64,6 +64,23 @@ test('film-inspired scoop and spoilers remain compact and part of the inspection
       assert.equal(spoiler.userData.partId, id)
       assert.ok(new THREE.Box3().setFromObject(spoiler).min.y > 0)
     }
+  } finally {
+    assembly.dispose()
+  }
+})
+
+test('the rear spoiler is a thin cambered blade on two pedestals, not a shelf', () => {
+  const assembly = createCarAssembly()
+  try {
+    assembly.group.updateMatrixWorld(true)
+    const spoiler = assembly.partObjects('trunkLid')[0]!.getObjectByName('rearSpoiler')!
+    const box = new THREE.Box3().setFromObject(spoiler)
+    const size = box.getSize(new THREE.Vector3())
+    assert.ok(size.x > 60 && size.x < 64, `blade span out of range: ${size.x}`)
+    assert.ok(size.z <= 8.5, `assembly too deep front-to-back for a blade wing: ${size.z}`)
+    assert.ok(box.max.y <= DECK_Y + 8 && box.max.y >= DECK_Y + 5, `blade sits at the wrong height: ${box.max.y}`)
+    const meshes = spoiler.children.filter((child) => (child as THREE.Mesh).isMesh)
+    assert.equal(meshes.length, 2, 'expected exactly one blade+end-plate mesh and one stanchions+pads mesh')
   } finally {
     assembly.dispose()
   }

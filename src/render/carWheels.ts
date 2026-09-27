@@ -62,7 +62,7 @@ const TREAD_BLOCK_FILL = 0.68
 /** The chrome lip's outer, tyre-facing edge; the rim's full axial half-width. */
 const RIM_LIP_OUTER_Y = HALF_RIM_WIDTH
 /** The gunmetal centre dish sits this far axially inboard of the lip's outer face. */
-const RIM_DISH_DEPTH = 3.0
+const RIM_DISH_DEPTH = 3.7
 const RIM_DISH_Y = RIM_LIP_OUTER_Y - RIM_DISH_DEPTH
 /** Radius of the plain inboard barrel, a touch inside the tyre bead. */
 const RIM_BARREL_RADIUS = RIM_RADIUS - 1
@@ -189,29 +189,29 @@ function forMerge(geometries: THREE.BufferGeometry[]): THREE.BufferGeometry[] {
 const SIDEWALL_STATION_COUNT = 12
 const SIDEWALL_SHOULDER_START = 0.7
 
-function buildOutboardSidewall(): THREE.Vector2[] {
+/** One sidewall station (radius, axial half-width) at normalised t from the bead to the tread. */
+function sidewallStation(t: number): THREE.Vector2 {
   const bulgeHalfWidth = HALF_TIRE_WIDTH - 0.9
-  const stations: THREE.Vector2[] = []
-  for (let i = 0; i < SIDEWALL_STATION_COUNT; i += 1) {
-    const t = i / (SIDEWALL_STATION_COUNT - 1)
-    const radius = THREE.MathUtils.lerp(TIRE_BEAD_RADIUS, TREAD_BASE_RADIUS, t)
-    let halfWidth: number
-    if (t <= 0.5) {
-      // Smoothstep from the bead up to the tyre's full bulge.
-      const bulgeT = t / 0.5
-      const eased = bulgeT * bulgeT * (3 - 2 * bulgeT)
-      halfWidth = THREE.MathUtils.lerp(bulgeHalfWidth, HALF_TIRE_WIDTH, eased)
-    } else if (t <= SIDEWALL_SHOULDER_START) {
-      halfWidth = HALF_TIRE_WIDTH
-    } else {
-      // Quarter-ellipse shoulder rounding the bulge into the tread's half-width.
-      const shoulderT = (t - SIDEWALL_SHOULDER_START) / (1 - SIDEWALL_SHOULDER_START)
-      const angle = shoulderT * (Math.PI / 2)
-      halfWidth = TIRE_TREAD_HALF_WIDTH + (HALF_TIRE_WIDTH - TIRE_TREAD_HALF_WIDTH) * Math.cos(angle)
-    }
-    stations.push(new THREE.Vector2(radius, halfWidth))
+  const radius = THREE.MathUtils.lerp(TIRE_BEAD_RADIUS, TREAD_BASE_RADIUS, t)
+  let halfWidth: number
+  if (t <= 0.5) {
+    // Smoothstep from the bead up to the tyre's full bulge.
+    const bulgeT = t / 0.5
+    const eased = bulgeT * bulgeT * (3 - 2 * bulgeT)
+    halfWidth = THREE.MathUtils.lerp(bulgeHalfWidth, HALF_TIRE_WIDTH, eased)
+  } else if (t <= SIDEWALL_SHOULDER_START) {
+    halfWidth = HALF_TIRE_WIDTH
+  } else {
+    // Quarter-ellipse shoulder rounding the bulge into the tread's half-width.
+    const shoulderT = (t - SIDEWALL_SHOULDER_START) / (1 - SIDEWALL_SHOULDER_START)
+    const angle = shoulderT * (Math.PI / 2)
+    halfWidth = TIRE_TREAD_HALF_WIDTH + (HALF_TIRE_WIDTH - TIRE_TREAD_HALF_WIDTH) * Math.cos(angle)
   }
-  return stations
+  return new THREE.Vector2(radius, halfWidth)
+}
+
+function buildOutboardSidewall(): THREE.Vector2[] {
+  return Array.from({ length: SIDEWALL_STATION_COUNT }, (_, i) => sidewallStation(i / (SIDEWALL_STATION_COUNT - 1)))
 }
 
 const OUTBOARD_SIDEWALL = buildOutboardSidewall()
@@ -253,6 +253,31 @@ function buildTireGeometry(): THREE.BufferGeometry {
   )
   for (const block of secondRow) block.rotateY(Math.PI / TREAD_BLOCK_COUNT)
   return mergeGeometries(forMerge([body, ...firstRow, ...secondRow]))
+}
+
+/** Where along `buildOutboardSidewall`'s t range the raised-letter band sits. */
+const TIRE_LETTER_T_START = 0.22
+const TIRE_LETTER_T_END = 0.58
+const TIRE_LETTER_STATION_COUNT = 8
+/** How far the lettering band's half-width is pushed past the sidewall surface, so it reads
+ * as raised rather than flush. */
+const TIRE_LETTER_PROUD_OFFSET = 0.06
+
+/** The sidewall stations over just the letter band's t range, pushed proud of the rubber. They are
+ * unnegated, like `buildTireProfile`'s outboard half, so the band sits on the outboard face, and
+ * run tread-to-bead like that half so the lathe's normals face out (bead-to-tread is back-face
+ * culled and the band vanishes). */
+function buildTireLetterStations(): THREE.Vector2[] {
+  return Array.from({ length: TIRE_LETTER_STATION_COUNT }, (_, i) => {
+    const t = TIRE_LETTER_T_END - (TIRE_LETTER_T_END - TIRE_LETTER_T_START) * (i / (TIRE_LETTER_STATION_COUNT - 1))
+    const station = sidewallStation(t)
+    return new THREE.Vector2(station.x, station.y + TIRE_LETTER_PROUD_OFFSET)
+  })
+}
+
+/** The raised "RADIAL G/T" lettering band, lathed as a thin ring proud of the outboard sidewall. */
+function buildTireLetterGeometry(): THREE.BufferGeometry {
+  return new THREE.LatheGeometry(buildTireLetterStations(), LATHE_SEGMENTS)
 }
 
 // -------------------------------------------------------------------------------------------
@@ -345,10 +370,13 @@ function buildWheel(
   group.name = id
 
   const tire = finishMesh(new THREE.Mesh(buildTireGeometry(), materials.rubber))
+  const lettering = finishMesh(new THREE.Mesh(buildTireLetterGeometry(), materials.tireLetter))
+  lettering.name = 'tireLettering'
+  lettering.castShadow = false
   const chrome = finishMesh(new THREE.Mesh(buildChromeGeometry(), materials.chrome))
   const spokes = finishMesh(new THREE.Mesh(buildSpokesGeometry(), materials.wheelSpoke))
   const barrel = finishMesh(new THREE.Mesh(buildBarrelGeometry(), materials.steelDark))
-  group.add(tire, chrome, spokes, barrel)
+  group.add(tire, lettering, chrome, spokes, barrel)
 
   orientForSide(group, mirrored)
   group.position.set(center[0], center[1], center[2])

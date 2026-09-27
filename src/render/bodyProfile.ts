@@ -5,6 +5,7 @@ import {
   DECK_Y,
   DOOR_FRONT_Z,
   DOOR_REAR_Z,
+  FRONT_AXLE_Z,
   FENDER_CREASE_FRONT_Y,
   FENDER_CREASE_REAR_Y,
   HOOD_FRONT_Y,
@@ -17,6 +18,7 @@ import {
   NOSE_Z,
   QUARTER_GLASS_REAR_Z,
   REAR_GLASS_BASE_HALF_WIDTH,
+  REAR_AXLE_Z,
   REAR_GLASS_BASE_Z,
   ROCKER_BOTTOM_Y,
   ROCKER_HALF_WIDTH,
@@ -279,6 +281,31 @@ export const STATIONS: readonly Station[] = [
   quarterStation(TAIL_Z),
 ]
 
+/** The front shoulder tucks in toward the door by this much, centred on the front axle. */
+const FRONT_SHOULDER_TUCK = 0.65
+const FRONT_SHOULDER_TUCK_SIGMA = 25
+/**
+ * The 1969 hip: the quarter panel swells outward over the rear wheel, most at the belt/bulge
+ * band and centred a little behind the axle, fading in past the door seam so the door skin
+ * stays flush and dying out ahead of the tail corner.
+ */
+const HIP_Z = REAR_AXLE_Z - 2
+const HIP_SIGMA = 17
+const HIP_BELT_SWELL = 0.9
+const HIP_BULGE_SWELL = 1.1
+/** The hip is gated to zero over this many inches behind the door seam. */
+const HIP_FADE_IN = 6
+/** The fender crease crowns over the headlights by this much before dropping to the nose. */
+const FENDER_PEAK_Z = 80
+const FENDER_PEAK_SIGMA = 10
+const FENDER_PEAK_RISE = 0.5
+
+/** 0 ahead of the door seam, rising smoothly to the hip's bell curve behind it. */
+export function quarterHip(z: number): number {
+  const gate = THREE.MathUtils.smoothstep(DOOR_REAR_Z - z, 0, HIP_FADE_IN)
+  return gate * Math.exp(-(((z - HIP_Z) / HIP_SIGMA) ** 2))
+}
+
 /** Smooth longitudinal contours, preserving hood heights and shared panel attachment seams. */
 export function stationAt(z: number): Station {
   const stations = STATIONS
@@ -293,9 +320,15 @@ export function stationAt(z: number): Station {
       for (const key of ['rockerBottom', 'rockerTop', 'bulge', 'belt', 'crease', 'center'] as const) {
         result[key] = [0, 1].map((axis) => curvedSample(stations.map((s) => [-s.z, s[key][axis]] as const), -z)) as [number, number]
       }
-      // The broad upper shoulders tuck into the doors while the lower skin stays full.
-      const haunch = Math.exp(-(((z - 54) / 25) ** 2)) + Math.exp(-(((z + 54) / 22) ** 2))
-      result.belt = [result.belt[0] - 0.65 * haunch, result.belt[1]]
+      // The front shoulder tucks into the door while the lower skin stays full; behind the door
+      // the quarter swells outward into the 1969 hip over the rear wheel; and the fender line
+      // crowns over the headlights before it drops to the nose.
+      const frontTuck = Math.exp(-(((z - FRONT_AXLE_Z) / FRONT_SHOULDER_TUCK_SIGMA) ** 2))
+      const hip = quarterHip(z)
+      const peak = Math.exp(-(((z - FENDER_PEAK_Z) / FENDER_PEAK_SIGMA) ** 2))
+      result.belt = [result.belt[0] - FRONT_SHOULDER_TUCK * frontTuck + HIP_BELT_SWELL * hip, result.belt[1]]
+      result.bulge = [result.bulge[0] + HIP_BULGE_SWELL * hip, result.bulge[1]]
+      result.crease = [result.crease[0], result.crease[1] + FENDER_PEAK_RISE * peak]
       return result
     }
   }

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { sectionHalfWidth, stationAt, STATIONS } from './bodyProfile.ts'
+import { DOOR_REAR_Z, REAR_AXLE_Z, TAIL_CORNER_RADIUS, TAIL_Z } from '../car/dimensions.ts'
+import { quarterHip, sectionHalfWidth, stationAt, STATIONS } from './bodyProfile.ts'
 
 test('body sections curve smoothly through the sidewall bulge without overshooting', () => {
   for (const z of [54, 0, -54]) {
@@ -29,4 +30,23 @@ test('longitudinal panels have continuous tangents at the interior stations', ()
       }
     }
   }
+})
+
+test('the quarter swells into a hip over the rear wheel and the fender crowns over the headlights', () => {
+  // The hip is absent at the door seam (so the door skin stays flush) and fully out behind the axle.
+  assert.equal(quarterHip(DOOR_REAR_Z), 0)
+  assert.ok(quarterHip(DOOR_REAR_Z - 1) < 0.05, 'the hip fades in gently behind the seam')
+  const seam = stationAt(DOOR_REAR_Z)
+  const hip = stationAt(REAR_AXLE_Z - 2)
+  assert.ok(hip.bulge[0] > seam.bulge[0] + 0.9, `hip bulge ${hip.bulge[0]} vs seam ${seam.bulge[0]}`)
+  assert.ok(hip.belt[0] > seam.belt[0] + 0.7, `hip belt ${hip.belt[0]} vs seam ${seam.belt[0]}`)
+  // The swell is gone again by the tail corner.
+  assert.ok(quarterHip(TAIL_Z + TAIL_CORNER_RADIUS) < 0.05, 'no hip into the tail corner')
+  // The fender crease crowns over the headlights: above the straight line between the points a
+  // hand behind and a hand ahead of it (the crease also rises toward the cowl overall).
+  const behind = stationAt(66).crease[1]
+  const ahead = stationAt(91).crease[1]
+  const chord = behind + (ahead - behind) * ((80 - 66) / (91 - 66))
+  assert.ok(stationAt(80).crease[1] > chord + 0.3, `crease ${stationAt(80).crease[1]} vs chord ${chord}`)
+  assert.equal(stationAt(DOOR_REAR_Z).crease[1], stationAt(DOOR_REAR_Z).belt[1], 'no crease over the doors')
 })

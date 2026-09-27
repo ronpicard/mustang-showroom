@@ -53,6 +53,8 @@ export interface CarMaterials {
   underbody: THREE.MeshStandardMaterial
   /** Black hoses, belts and wiring. */
   hose: THREE.MeshStandardMaterial
+  /** Raised white-letter tyre sidewall lettering band, wrapping once around the tyre. */
+  tireLetter: THREE.MeshStandardMaterial
   /** Applies a paint from the rack to `paint`. */
   setPaint(paint: PaintInfo): void
   /** Lights the headlight bulbs and taillight lenses, or puts them out. */
@@ -108,6 +110,46 @@ function makeMicrotexture(seed: number, base: number, variation: number, repeats
   }, repeats, repeats)
 }
 
+const TIRE_LETTER_TEXTURE_WIDTH = 2048
+const TIRE_LETTER_TEXTURE_HEIGHT = 128
+const TIRE_LETTER_TEXT = 'RADIAL G/T'
+
+/**
+ * The "RADIAL G/T" raised-white-letter strip that wraps once around the tyre's outboard
+ * shoulder: drawn twice across the strip's width (so it reads twice per revolution) with a
+ * small dot marking the gap between each repeat, white on a transparent background so the
+ * rubber shows through everywhere else. `document` is unavailable under the Node test runner
+ * (see `audio.ts`'s guard for the same condition), so this returns `null` there and the
+ * material falls back to a flat colour with no map.
+ */
+function makeTireLetterTexture(): THREE.CanvasTexture | null {
+  if (typeof document === 'undefined') return null
+  const canvas = document.createElement('canvas')
+  canvas.width = TIRE_LETTER_TEXTURE_WIDTH
+  canvas.height = TIRE_LETTER_TEXTURE_HEIGHT
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return null
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  ctx.fillStyle = '#ffffff'
+  ctx.font = 'bold 96px sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(TIRE_LETTER_TEXT, canvas.width * 0.25, canvas.height / 2)
+  ctx.fillText(TIRE_LETTER_TEXT, canvas.width * 0.75, canvas.height / 2)
+  // Small dots mark the gaps between the two repeats, at the strip's seam and its midpoint.
+  for (const x of [0, canvas.width / 2]) {
+    ctx.beginPath()
+    ctx.arc(x, canvas.height / 2, 6, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.wrapS = THREE.RepeatWrapping
+  texture.wrapT = THREE.ClampToEdgeWrapping
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.needsUpdate = true
+  return texture
+}
+
 export function createCarMaterials(): CarMaterials {
   const paintMicrotexture = makeMicrotexture(11, 0.97, 0.035, 4)
   const rubberMicrotexture = makeMicrotexture(23, 0.91, 0.12, 6)
@@ -124,7 +166,7 @@ export function createCarMaterials(): CarMaterials {
       + (seededNoise(x, y, 67) - 0.5) * 0.08
     return [Math.round(112 + 30 * grain), Math.round(65 + 19 * grain), Math.round(34 + 10 * grain)]
   }, 2, 1, THREE.SRGBColorSpace)
-  const textures = [paintMicrotexture, rubberMicrotexture, castMicrotexture, vinylMicrotexture, carpetMicrotexture, woodgrainMap]
+  const textures: THREE.Texture[] = [paintMicrotexture, rubberMicrotexture, castMicrotexture, vinylMicrotexture, carpetMicrotexture, woodgrainMap]
 
   const paint = new THREE.MeshPhysicalMaterial({
     color: 0x2a2c30,
@@ -223,6 +265,21 @@ export function createCarMaterials(): CarMaterials {
   const radiatorCore = new THREE.MeshStandardMaterial({ color: 0x1e2124, roughness: 0.85, metalness: 0.5 })
   const underbody = new THREE.MeshStandardMaterial({ color: 0x1a1a1c, roughness: 0.95, metalness: 0.1 })
   const hose = new THREE.MeshStandardMaterial({ color: 0x121212, roughness: 0.8, metalness: 0 })
+  const tireLetterTexture = makeTireLetterTexture()
+  const tireLetter = new THREE.MeshStandardMaterial({
+    color: 0xe9e6dc,
+    roughness: 0.9,
+    metalness: 0,
+    transparent: true,
+    alphaTest: 0.5,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1,
+  })
+  if (tireLetterTexture) {
+    tireLetter.map = tireLetterTexture
+    textures.push(tireLetterTexture)
+  }
 
   const all: THREE.Material[] = [
     paint,
@@ -249,6 +306,7 @@ export function createCarMaterials(): CarMaterials {
     radiatorCore,
     underbody,
     hose,
+    tireLetter,
   ]
   let disposed = false
 
@@ -277,6 +335,7 @@ export function createCarMaterials(): CarMaterials {
     radiatorCore,
     underbody,
     hose,
+    tireLetter,
     setPaint(info: PaintInfo) {
       paint.color.set(info.hex)
       // Keep both solid and metallic finishes deep and glossy beneath the clearcoat.
