@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import * as THREE from 'three'
-import { FRONT_AXLE_Z, REAR_AXLE_Z, ROCKER_BOTTOM_Y, ROCKER_TOP_Y, TURN_SIGNAL_X, TURN_SIGNAL_Y, WHEEL_ARCH_CENTER_Y, WHEEL_ARCH_RADIUS } from '../car/dimensions.ts'
+import { FRONT_AXLE_Z, HOOD_PIN_X, HOOD_PIN_Z, HOOD_SCOOP_REAR_Z, REAR_AXLE_Z, ROCKER_BOTTOM_Y, ROCKER_TOP_Y, TURN_SIGNAL_X, TURN_SIGNAL_Y, WHEEL_ARCH_CENTER_Y, WHEEL_ARCH_RADIUS } from '../car/dimensions.ts'
 import type { PartId } from '../car/types.ts'
 import { createCarAssembly } from './carAssembly.ts'
 import { stationAt } from './bodyProfile.ts'
@@ -44,6 +44,20 @@ test('film-inspired scoop and spoilers remain compact and part of the inspection
     const size = new THREE.Box3().setFromObject(scoop).getSize(new THREE.Vector3())
     assert.ok(size.x < 18 && size.z < 27 && size.y < 5, `oversized scoop: ${size.toArray()}`)
     assert.equal((scoop.children[0] as THREE.Mesh).material, assembly.materials.satinBlack)
+    // The scoop is rooted in the hood crown and stands a domed 3 to 4 inches proud of it at the mouth.
+    const scoopBox = new THREE.Box3().setFromObject(scoop)
+    const mouthCrownY = stationAt(scoopBox.max.z).center[1]
+    assert.ok(Math.abs(scoopBox.min.z - HOOD_SCOOP_REAR_Z) < 0.5)
+    assert.ok(scoopBox.min.y < mouthCrownY && scoopBox.min.y > mouthCrownY - 1.5, `scoop floats: ${scoopBox.min.y} vs ${mouthCrownY}`)
+    assert.ok(scoopBox.max.y - mouthCrownY > 3 && scoopBox.max.y - mouthCrownY < 4.5, `scoop height: ${scoopBox.max.y - mouthCrownY}`)
+    // Hood pins rest on the crowned skin at their own x rather than at the centreline height.
+    for (const pin of assembly.partObjects('hoodPins')[0]!.children) {
+      const pinBox = new THREE.Box3().setFromObject(pin)
+      const station = stationAt(HOOD_PIN_Z)
+      const u = HOOD_PIN_X / station.crease[0]
+      const skinY = station.crease[1] + (station.center[1] - station.crease[1]) * (1 - u * u)
+      assert.ok(Math.abs(pinBox.min.y - skinY) < 0.2, `hood pin floats: ${pinBox.min.y} vs ${skinY}`)
+    }
     for (const [id, name] of [['frontValance', 'chinSpoiler'], ['trunkLid', 'rearSpoiler']] as const) {
       const spoiler = assembly.partObjects(id)[0]!.getObjectByName(name)!
       assert.ok(spoiler)

@@ -650,6 +650,24 @@ function buildFrameGeometry(width: number, height: number, thickness: number): T
   return merged
 }
 
+/** The same outline as `buildFrameGeometry` but as a single-sided flat shape facing +Z. */
+function buildFlatFrameGeometry(width: number, height: number, thickness: number): THREE.BufferGeometry {
+  const outer = new THREE.Shape()
+  outer.moveTo(-width / 2 - thickness, -height / 2 - thickness)
+  outer.lineTo(width / 2 + thickness, -height / 2 - thickness)
+  outer.lineTo(width / 2 + thickness, height / 2 + thickness)
+  outer.lineTo(-width / 2 - thickness, height / 2 + thickness)
+  outer.closePath()
+  const hole = new THREE.Path()
+  hole.moveTo(-width / 2, -height / 2)
+  hole.lineTo(-width / 2, height / 2)
+  hole.lineTo(width / 2, height / 2)
+  hole.lineTo(width / 2, -height / 2)
+  hole.closePath()
+  outer.holes.push(hole)
+  return new THREE.ShapeGeometry(outer)
+}
+
 // -------------------------------------------------------------------------------------------
 // Ceiling: dark plane, two long softbox panels (environment group) and six can lights with spots.
 // -------------------------------------------------------------------------------------------
@@ -685,7 +703,9 @@ function buildCeiling(): CeilingBuild {
     // Front side only (facing down): the top preset looks down from above the ceiling, and a
     // double-sided panel would fill that view with its back face.
   })
-  const softboxFrameGeometry = buildFrameGeometry(SOFTBOX_WIDTH, SOFTBOX_LENGTH, SOFTBOX_FRAME_THICKNESS)
+  // Flat and front-side only like the panel: a boxed frame showed its top faces as a black bar
+  // across the car from the top preset.
+  const softboxFrameGeometry = buildFlatFrameGeometry(SOFTBOX_WIDTH, SOFTBOX_LENGTH, SOFTBOX_FRAME_THICKNESS)
   const softboxFrameMaterial = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.6 })
   disposables.push(softboxGeometry, softboxMaterial, softboxFrameGeometry, softboxFrameMaterial)
   const softboxes = new THREE.Group()

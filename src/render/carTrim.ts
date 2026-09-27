@@ -3,6 +3,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import type { CarMaterials } from './carMaterials.ts'
 import { tagPart, type PartBuild } from './partBuild.ts'
+import { stationAt } from './bodyProfile.ts'
 import {
   BODY_HALF_WIDTH,
   BUMPER_CENTER_Y,
@@ -27,11 +28,9 @@ import {
   HEADLIGHT_OUTER_X,
   HEADLIGHT_OUTER_Z,
   HEADLIGHT_Y,
-  HOOD_FRONT_Y,
   HOOD_FRONT_Z,
   HOOD_PIN_X,
   HOOD_PIN_Z,
-  HOOD_REAR_Y,
   HOOD_REAR_Z,
   HOOD_SCOOP_FRONT_Z,
   HOOD_SCOOP_REAR_Z,
@@ -111,6 +110,10 @@ const LICENSE_PLATE_FRAME_WIDTH = 0.6
 const HOOD_SCOOP_HALF_WIDTH = 8.5
 const HOOD_SCOOP_TOP_HEIGHT = 3
 const HOOD_SCOOP_REAR_HEIGHT = 0.25
+/** How far the scoop's base sinks below the hood skin, so its walls meet the crown without a gap. */
+const HOOD_SCOOP_SINK = 0.5
+/** The dome across the scoop's roof at the mouth; it fades to nothing at the rear. */
+const HOOD_SCOOP_CROWN = 0.7
 const HOOD_SCOOP_MOUTH_INSET = 0.55
 const HOOD_SCOOP_LIP_RADIUS = 0.16
 
@@ -169,10 +172,14 @@ function finish<T extends THREE.Object3D>(object: T, castsShadow = true): T {
   return object
 }
 
-/** Height of the hood's outer skin at a given z: the linear fall from the cowl to the nose. */
-function hoodSurfaceY(z: number): number {
-  const t = (z - HOOD_REAR_Z) / (HOOD_FRONT_Z - HOOD_REAR_Z)
-  return THREE.MathUtils.lerp(HOOD_REAR_Y, HOOD_FRONT_Y, THREE.MathUtils.clamp(t, 0, 1))
+/**
+ * Height of the hood's outer skin at a given z and x: the same crease-to-centre crown the hood
+ * panel is lofted over (see `crownRow` in carBody), so scoop and pins sit on the real surface.
+ */
+function hoodSurfaceY(z: number, x = 0): number {
+  const station = stationAt(THREE.MathUtils.clamp(z, HOOD_REAR_Z, HOOD_FRONT_Z))
+  const u = THREE.MathUtils.clamp(x / station.crease[0], -1, 1)
+  return station.crease[1] + (station.center[1] - station.crease[1]) * (1 - u * u)
 }
 
 /** Draws a rounded-rectangle outline into a Shape (outer boundary) or a Path (a hole). */
@@ -638,24 +645,27 @@ function buildHoodScoop(materials: CarMaterials): THREE.Group {
     const eased = t * t * (3 - 2 * t)
     const z = THREE.MathUtils.lerp(HOOD_SCOOP_REAR_Z, frontZ, t)
     const hoodY = hoodSurfaceY(z)
-    const halfWidth = HOOD_SCOOP_HALF_WIDTH * (0.6 + 0.4 * eased)
+    // Narrow and low at the rear, where it fades into the hood, swelling to the full mouth.
+    const halfWidth = HOOD_SCOOP_HALF_WIDTH * (0.45 + 0.55 * eased)
     const height = THREE.MathUtils.lerp(HOOD_SCOOP_REAR_HEIGHT, HOOD_SCOOP_TOP_HEIGHT, eased)
-    return { z, ring: roundedRectRing(halfWidth, hoodY - 0.2, hoodY + height, 1.1 * eased + 0.2) }
+    const ring = crownedRing(halfWidth, hoodY - HOOD_SCOOP_SINK, hoodY + height, 0.3 + 1.2 * eased, HOOD_SCOOP_CROWN * eased)
+    return { z, ring }
   })
 
   const shell = finish(new THREE.Mesh(loftStations(stations), materials.satinBlack))
   group.add(shell)
 
-  const frontHoodY = hoodSurfaceY(frontZ)
-  const mouthBottom = frontHoodY + HOOD_SCOOP_MOUTH_INSET * 0.5
-  const mouthTop = frontHoodY + HOOD_SCOOP_TOP_HEIGHT - HOOD_SCOOP_MOUTH_INSET * 0.5
-  const mouth = new THREE.Shape()
-  roundedRectOutline(mouth, (HOOD_SCOOP_HALF_WIDTH - HOOD_SCOOP_MOUTH_INSET) * 2, mouthTop - mouthBottom, 1)
+  // The mouth fills the whole front ring (inset by the lip) so the domed roof never shows a gap.
+  const frontRing = stations[stationCount].ring
+  const mouthCentreY = hoodSurfaceY(frontZ) + (HOOD_SCOOP_TOP_HEIGHT - HOOD_SCOOP_SINK) / 2
+  const mouth = new THREE.Shape(frontRing.map((point) => new THREE.Vector2(
+    point.x * (1 - HOOD_SCOOP_MOUTH_INSET / HOOD_SCOOP_HALF_WIDTH),
+    mouthCentreY + (point.y - mouthCentreY) * (1 - HOOD_SCOOP_MOUTH_INSET / HOOD_SCOOP_TOP_HEIGHT),
+  )))
   const interior = finish(new THREE.Mesh(new THREE.ShapeGeometry(mouth), materials.blackTrim))
-  interior.position.set(0, (mouthBottom + mouthTop) / 2, frontZ - 0.25)
+  interior.position.z = frontZ - 0.25
   group.add(interior)
 
-  const frontRing = stations[stationCount].ring
   const lipPath = new THREE.CatmullRomCurve3(
     frontRing.map((point) => new THREE.Vector3(point.x, point.y, frontZ + 0.02)),
     true,
@@ -666,13 +676,23 @@ function buildHoodScoop(materials: CarMaterials): THREE.Group {
   return group
 }
 
+/** A rounded-rectangle ring whose top edge bows upward by `crown` at the centre. */
+function crownedRing(halfWidth: number, bottom: number, top: number, radius: number, crown: number): THREE.Vector2[] {
+  const midY = (top + bottom) / 2
+  return roundedRectRing(halfWidth, bottom, top, radius).map((point) => {
+    const across = 1 - (point.x / halfWidth) ** 2
+    const upward = THREE.MathUtils.clamp((point.y - midY) / (top - midY), 0, 1)
+    return new THREE.Vector2(point.x, point.y + crown * across * upward)
+  })
+}
+
 // -------------------------------------------------------------------------------------------
 // Hood pins
 // -------------------------------------------------------------------------------------------
 
 function buildHoodPin(materials: CarMaterials): THREE.Group {
   const group = new THREE.Group()
-  const baseY = hoodSurfaceY(HOOD_PIN_Z) + 0.2
+  const baseY = hoodSurfaceY(HOOD_PIN_Z, HOOD_PIN_X) - 0.05
 
   const plate = finish(new THREE.Mesh(new THREE.CylinderGeometry(HOOD_PIN_PLATE_DIAMETER / 2, HOOD_PIN_PLATE_DIAMETER / 2, 0.25, 20), materials.chrome))
   plate.position.y = baseY + 0.125

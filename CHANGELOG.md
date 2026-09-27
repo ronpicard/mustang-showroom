@@ -23,6 +23,8 @@ All notable changes to Mustang Showroom are documented in this file, following t
 
 ### Fixed
 
+- From the Top view, the ceiling softbox's frame drew a solid black bar straight across the hood and cabin. The frame is now a flat outline that only shows its underside, like the light panel it surrounds.
+- The hood scoop was a flat, knife-edged plate that seemed to float over the stripes. It now rises from the hood as a rounded dome that blends into the skin at the rear, with a full mouth at the front, and it and the hood pins sit on the crowned hood surface instead of the centreline height.
 - Rear quarter windows now sit in real openings instead of over opaque bodywork.
 - The air-cleaner seal now lies flat, and the radiator sits below the closed hood. Wheelhouse liners face outward so assembled wheel openings no longer expose the mechanical parts behind them.
 - The display placard sits near the wall, keeping the showcase view clear on phones.
