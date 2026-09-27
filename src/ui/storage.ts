@@ -2,8 +2,9 @@ import { DEFAULT_PAINT, isPaintId } from '../car/paints.ts'
 import type { Settings } from '../car/types.ts'
 
 /**
- * localStorage access for the shell: paint choice, mute and turntable toggles, persisted as one
- * JSON blob under `mustang-showroom.settings`. Every access is wrapped in try/catch (private
+ * localStorage access for the shell: the paint choice and mute toggle, persisted as one JSON
+ * blob under `mustang-showroom.settings` (an older blob may also carry a `turntable` flag, now
+ * ignored: the turntable always starts on). Every access is wrapped in try/catch (private
  * mode, quota errors and disabled storage all throw) so the rest of the app never has to guard a
  * call. Values are validated field by field so a corrupted or foreign blob never reaches the
  * engine — this module must not touch `window` at import time (only inside `safeLocalStorage`'s
@@ -15,7 +16,6 @@ const SETTINGS_KEY = 'mustang-showroom.settings'
 export const DEFAULT_SETTINGS: Settings = {
   paint: DEFAULT_PAINT,
   muted: false,
-  turntable: true,
 }
 
 /** Probes localStorage once and hands back either the real Storage or null. */
@@ -41,7 +41,6 @@ export function loadSettings(storage: Storage | null): Settings {
     return {
       paint: isPaintId(record.paint) ? record.paint : DEFAULT_SETTINGS.paint,
       muted: typeof record.muted === 'boolean' ? record.muted : DEFAULT_SETTINGS.muted,
-      turntable: typeof record.turntable === 'boolean' ? record.turntable : DEFAULT_SETTINGS.turntable,
     }
   } catch {
     return { ...DEFAULT_SETTINGS }

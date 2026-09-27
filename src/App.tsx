@@ -39,8 +39,12 @@ export default function App() {
 
   const [explode, setExplode] = useState(0)
   const [open, setOpen] = useState<Record<HingedPartId, boolean>>(DEFAULT_OPEN)
-  const [headlights, setHeadlights] = useState(false)
-  const [engineRunning, setEngineRunning] = useState(false)
+  // The showroom opens with the turntable turning, the lights on and the engine running.
+  const [turntable, setTurntable] = useState(true)
+  const [headlights, setHeadlights] = useState(true)
+  const [engineRunning, setEngineRunning] = useState(true)
+  const engineRunningRef = useRef(engineRunning)
+  engineRunningRef.current = engineRunning
   const [cameraPreset, setCameraPreset] = useState<CameraPreset | 'custom' | 'part'>('showcase')
   const [selected, setSelected] = useState<PartId | null>(null)
   const [hovered, setHovered] = useState<PartId | null>(null)
@@ -58,18 +62,21 @@ export default function App() {
   useEffect(() => {
     if (!api) return
     api.setPaint(settings.paint)
-    api.setTurntable(settings.turntable)
+    api.setTurntable(turntable)
+    api.setHeadlights(headlights)
+    api.setEngineRunning(engineRunning)
     audio.setMuted(settings.muted)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api])
 
-  // Unlock audio on the very first user gesture, as browsers require. Entering the showroom (a
-  // click/Enter/Space) is itself such a gesture, so this fires at the same moment either way.
+  // Unlock audio on the very first user gesture, as browsers require. The engine is already
+  // running silently by then (it starts with the page), so its sound starts at that moment too.
   useEffect(() => {
     function unlock() {
       if (unlockedAudioRef.current) return
       unlockedAudioRef.current = true
       audio.resume()
+      if (engineRunningRef.current) audio.setEngine(true)
     }
     window.addEventListener('pointerdown', unlock)
     window.addEventListener('keydown', unlock)
@@ -223,10 +230,9 @@ export default function App() {
   }
 
   function handleToggleTurntable() {
-    setSettings((current) => {
-      const next: Settings = { ...current, turntable: !current.turntable }
-      api?.setTurntable(next.turntable)
-      saveSettings(storage, next)
+    setTurntable((current) => {
+      const next = !current
+      api?.setTurntable(next)
       return next
     })
   }
@@ -404,7 +410,7 @@ export default function App() {
         <Toolbar
           cameraPreset={cameraPreset}
           onCameraPreset={handleCameraPreset}
-          turntable={settings.turntable}
+          turntable={turntable}
           onToggleTurntable={handleToggleTurntable}
           headlights={headlights}
           onToggleHeadlights={handleToggleHeadlights}

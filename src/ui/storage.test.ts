@@ -55,27 +55,31 @@ test('loadSettings returns defaults for a non-object value', () => {
 
 test('loadSettings keeps a fully valid settings object', () => {
   const storage = new FakeStorage()
-  const settings = { paint: 'candyappleRed' as const, muted: true, turntable: false }
+  const settings = { paint: 'candyappleRed' as const, muted: true }
   saveSettings(storage, settings)
   assert.deepEqual(loadSettings(storage), settings)
 })
 
+test('loadSettings drops the turntable flag an older blob may carry, so the turntable always starts on', () => {
+  const storage = new FakeStorage()
+  storage.setItem(SETTINGS_KEY, JSON.stringify({ paint: 'candyappleRed', muted: false, turntable: false }))
+  assert.deepEqual(loadSettings(storage), { paint: 'candyappleRed', muted: false })
+})
+
 test('loadSettings falls back to the default paint for an unknown id', () => {
   const storage = new FakeStorage()
-  storage.setItem(SETTINGS_KEY, JSON.stringify({ paint: 'not-a-real-paint', muted: true, turntable: true }))
+  storage.setItem(SETTINGS_KEY, JSON.stringify({ paint: 'not-a-real-paint', muted: true }))
   const settings = loadSettings(storage)
   assert.equal(settings.paint, DEFAULT_SETTINGS.paint)
   assert.equal(settings.muted, true)
-  assert.equal(settings.turntable, true)
 })
 
-test('loadSettings coerces non-boolean muted/turntable to defaults', () => {
+test('loadSettings coerces a non-boolean muted to the default', () => {
   const storage = new FakeStorage()
-  storage.setItem(SETTINGS_KEY, JSON.stringify({ paint: 'ravenBlack', muted: 'yes', turntable: 1 }))
+  storage.setItem(SETTINGS_KEY, JSON.stringify({ paint: 'ravenBlack', muted: 'yes' }))
   const settings = loadSettings(storage)
   assert.equal(settings.paint, 'ravenBlack')
   assert.equal(settings.muted, DEFAULT_SETTINGS.muted)
-  assert.equal(settings.turntable, DEFAULT_SETTINGS.turntable)
 })
 
 test('saveSettings is a no-op with a null storage', () => {

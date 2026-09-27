@@ -10,6 +10,7 @@ All notable changes to Mustang Showroom are documented in this file, following t
 
 ### Changed
 
+- The showroom now opens with the turntable turning, the headlights on and the engine running; the engine's sound joins in at the first click or key press, since browsers keep audio silent until then. The turntable no longer remembers being switched off between visits (paint and mute are still remembered).
 - Realism pass: the side walls now carry long lightboxes at belt height, with a cool rim light from the back wall, so the door and quarter skins show a broad highlight gradient instead of a flat tone; an ambient occlusion pass darkens the wheel wells, grille mouth and panel gaps on the two highest quality steps, and each tyre gets its own contact patch on the turntable.
 - The body has the 1969 hip: the quarter panels swell outward over the rear wheels, fading in behind the door seam so the doors stay flush, and the fender line crowns over the headlights before dropping to the nose.
 - The rear spoiler is a thin cambered blade with turned-up end plates on two swept pedestals instead of a full-width shelf.

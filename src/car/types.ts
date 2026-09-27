@@ -204,9 +204,9 @@ export type SoundName =
   | 'lightsOn'
   | 'lightsOff'
 
-/** Settings the shell keeps in localStorage between visits. */
+/** Settings the shell keeps in localStorage between visits. The turntable is not one of them:
+ * it always starts turning on load. */
 export interface Settings {
   paint: PaintId
   muted: boolean
-  turntable: boolean
 }
