@@ -429,7 +429,12 @@ export function createAudio(): ShowroomAudio {
   /** The recordings' bytes once fetched, decoded into `recordedClips` when a context exists. */
   let clipBytes: Record<ClipName, ArrayBuffer> | null = null
   let recordedClips: Record<ClipName, AudioBuffer> | null = null
-  let clipsDecoding = false
+  /** Settles once the recordings' bytes have arrived, or once fetching them has failed for good. */
+  let clipFetch: Promise<void> = Promise.resolve()
+  /** The decode in flight for the current context, if any. */
+  let clipDecode: Promise<void> | null = null
+  /** The last engine start/stop request, so a start held until the recordings decode can be withdrawn. */
+  let engineWanted = false
   let lastRevBlipAt = -Infinity
   let lastThrottle = 0
   let engine: EngineNodes | null = null
@@ -447,7 +452,7 @@ export function createAudio(): ShowroomAudio {
   function preloadClips(): void {
     if (typeof fetch !== 'function' || typeof document === 'undefined') return
     const base = (import.meta as { env?: { BASE_URL?: string } }).env?.BASE_URL ?? './'
-    void Promise.all(
+    clipFetch = Promise.all(
       CLIP_NAMES.map(async (name) => {
         const url = new URL(base + RECORDED_CLIP_PATHS[name], document.baseURI)
         const response = await fetch(url)
@@ -465,20 +470,29 @@ export function createAudio(): ShowroomAudio {
     )
   }
 
-  /** Decodes the fetched recordings for `context`; the engine uses them from the next start. */
-  async function decodeClips(context: AudioContext): Promise<void> {
-    if (!clipBytes || recordedClips || clipsDecoding) return
-    clipsDecoding = true
-    try {
-      const decoded = await Promise.all(
-        CLIP_NAMES.map(async (name) => [name, await context.decodeAudioData(clipBytes![name].slice(0))] as const),
-      )
-      if (ctx === context) recordedClips = Object.fromEntries(decoded) as Record<ClipName, AudioBuffer>
-    } catch (error: unknown) {
-      console.warn('Engine recordings could not be decoded, using the synthesised engine:', error)
-    } finally {
-      clipsDecoding = false
-    }
+  /**
+   * Decodes the fetched recordings for `context`; the engine uses them from the next start. The
+   * returned promise settles once they are decoded, or once they are known to be unavailable
+   * (fetch or decode failed), so a caller can hold an engine start for them without ever hanging.
+   */
+  function decodeClips(context: AudioContext): Promise<void> {
+    if (recordedClips) return Promise.resolve()
+    if (clipDecode) return clipDecode
+    if (!clipBytes) return clipFetch.then(() => (clipBytes ? decodeClips(context) : undefined))
+    const bytes = clipBytes
+    clipDecode = (async () => {
+      try {
+        const decoded = await Promise.all(
+          CLIP_NAMES.map(async (name) => [name, await context.decodeAudioData(bytes[name].slice(0))] as const),
+        )
+        if (ctx === context) recordedClips = Object.fromEntries(decoded) as Record<ClipName, AudioBuffer>
+      } catch (error: unknown) {
+        console.warn('Engine recordings could not be decoded, using the synthesised engine:', error)
+      } finally {
+        clipDecode = null
+      }
+    })()
+    return clipDecode
   }
 
   preloadClips()
@@ -844,12 +858,34 @@ export function createAudio(): ShowroomAudio {
     }
   }
 
-  function voiceStarter(context: AudioContext, out: GainNode, _buffer: AudioBuffer, now: number, intensity: number): void {
-    startEngineAudio(context, out, now, intensity)
+  /**
+   * Starts the engine, holding the start while the recordings are still arriving (typically: the
+   * engine was started on the very gesture that unlocked audio), so the first start is never the
+   * synthesised fallback. A start held this way is dropped if the engine is switched off meanwhile.
+   */
+  function requestEngineStart(context: AudioContext, out: GainNode, intensity: number): void {
+    engineWanted = true
+    if (recordedClips) {
+      startEngineAudio(context, out, context.currentTime, intensity)
+      return
+    }
+    void decodeClips(context).then(() => {
+      if (!engineWanted || ctx !== context) return
+      withAudio((c, o) => startEngineAudio(c, o, c.currentTime, intensity))
+    })
   }
 
-  function voiceEngineStop(context: AudioContext, out: GainNode, _buffer: AudioBuffer, now: number, intensity: number): void {
-    stopEngineAudio(context, out, now, intensity)
+  function requestEngineStop(context: AudioContext, out: GainNode, intensity: number): void {
+    engineWanted = false
+    stopEngineAudio(context, out, context.currentTime, intensity)
+  }
+
+  function voiceStarter(context: AudioContext, out: GainNode, _buffer: AudioBuffer, _now: number, intensity: number): void {
+    requestEngineStart(context, out, intensity)
+  }
+
+  function voiceEngineStop(context: AudioContext, out: GainNode, _buffer: AudioBuffer, _now: number, intensity: number): void {
+    requestEngineStop(context, out, intensity)
   }
 
   const VOICES: Record<SoundName, Voice> = {
@@ -875,11 +911,7 @@ export function createAudio(): ShowroomAudio {
   }
 
   function setEngine(running: boolean): void {
-    withAudio((context, out) => {
-      const now = context.currentTime
-      if (running) startEngineAudio(context, out, now, 1)
-      else stopEngineAudio(context, out, now, 1)
-    })
+    withAudio((context, out) => (running ? requestEngineStart : requestEngineStop)(context, out, 1))
   }
 
   /** The rpm follower reads the target on its next tick, so this only records it. */
@@ -905,7 +937,8 @@ export function createAudio(): ShowroomAudio {
       throttleTarget = 0
       engineBuffers = null
       recordedClips = null
-      clipsDecoding = false
+      clipDecode = null
+      engineWanted = false
       noiseBuffer = null
       ctx = null
       master = null

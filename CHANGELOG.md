@@ -4,6 +4,10 @@ All notable changes to Mustang Showroom are documented in this file, following t
 
 ## [Unreleased]
 
+### Fixed
+
+- The first engine start after the page loads no longer plays the synthesised fallback V8: when the engine is started on the very click or key press that unlocks audio, the start now waits the few milliseconds for the recordings to decode, so the crank-and-catch recording plays from the first start rather than only after the engine is switched off and on again.
+
 ### Added
 
 - Selecting a part now turns the rest of the car into faint matte glass, with its chrome and clearcoat sparkle turned down, so the chosen part stands out wherever it sits, even deep in the engine bay or under the floor. Hovering another part shows it solid again, and deselecting restores the car.
