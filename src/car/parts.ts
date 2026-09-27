@@ -245,7 +245,7 @@ const DRAFTS: readonly PartDraft[] = [
     name: 'Taillights',
     group: 'exterior',
     description:
-      'Three vertical bars a side, the Mustang signature. The 1969 lenses are recessed in the tail panel with a chrome bezel around each cluster. Ford used sequential turn signals on the Cougar and Thunderbird; on the Mustang, all three bars flash together.',
+      'Three vertical lenses a side, the Mustang signature. The 1969 lenses sit in the recessed tail panel, each in its own chrome bezel inside a chrome cluster frame. Ford used sequential turn signals on the Cougar and Thunderbird; on the Mustang, all three bars flash together.',
     specs: [
       { label: 'Type', value: 'Three-bar, each side' },
       { label: 'Bezel', value: 'Chrome' },
@@ -271,7 +271,7 @@ const DRAFTS: readonly PartDraft[] = [
     name: 'Rear bumper',
     group: 'exterior',
     description:
-      'The rear bumper is a shallower chrome blade than the front, following the tail panel and wrapping into the quarter panels. The plate sits on the tail panel above it.',
+      'The rear bumper is a shallower chrome blade than the front, following the tail panel and wrapping around the rounded quarter ends. The licence plate and the round backup lights hang in the valance below it.',
     specs: [
       { label: 'Material', value: 'Chrome-plated steel' },
       { label: 'Height', value: '3 in' },

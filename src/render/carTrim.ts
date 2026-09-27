@@ -18,6 +18,12 @@ import {
   FRONT_BUMPER_Z,
   FUEL_CAP_DIAMETER,
   FUEL_CAP_Y,
+  BACKUP_LIGHT_DIAMETER,
+  BACKUP_LIGHT_X,
+  BACKUP_LIGHT_Y,
+  REAR_PLATE_Y,
+  TAIL_PANEL_FACE_Z,
+  TAIL_PANEL_HALF_WIDTH,
   GRILLE_BOTTOM_Y,
   GRILLE_HALF_WIDTH,
   GRILLE_TOP_Y,
@@ -92,6 +98,7 @@ const HEADLIGHT_FILAMENT_RADIUS = 0.5
 
 /** Taillight bezel frame and lens tuning. */
 const TAILLIGHT_BEZEL_WIDTH = 0.7
+const TAILLIGHT_LENS_BEZEL_WIDTH = 0.2
 const TAILLIGHT_FRAME_DEPTH = 1
 const TAILLIGHT_LENS_BULGE = 0.35
 const TAILLIGHT_FLUTE_COUNT = 6
@@ -546,24 +553,29 @@ function buildTaillightCluster(materials: CarMaterials): THREE.Group {
   )
   group.add(frame)
 
-  const backing = finish(new THREE.Mesh(new THREE.BoxGeometry(clusterWidth, TAILLIGHT_BAR_HEIGHT, 0.4), materials.blackTrim))
-  backing.position.z = -0.8
+  // A bright reflector inside the housing (forward of the lenses, +z), so they read red unlit.
+  const backing = finish(new THREE.Mesh(new THREE.BoxGeometry(clusterWidth, TAILLIGHT_BAR_HEIGHT, 0.4), materials.chrome))
+  backing.position.z = 0.7
   group.add(backing)
 
+  const lensWidth = TAILLIGHT_BAR_WIDTH - 0.3
+  const lensHeight = TAILLIGHT_BAR_HEIGHT - 0.4
   for (let i = 0; i < 3; i++) {
     const barX = (i - 1) * (TAILLIGHT_BAR_WIDTH + TAILLIGHT_BAR_GAP)
-    const lensGeometry = buildFlutedLens(
-      TAILLIGHT_BAR_WIDTH - 0.3,
-      TAILLIGHT_BAR_HEIGHT - 0.4,
-      TAILLIGHT_LENS_BULGE,
-      TAILLIGHT_FLUTE_COUNT,
-      TAILLIGHT_FLUTE_DEPTH,
-      'horizontal',
-    )
+    const lensGeometry = buildFlutedLens(lensWidth, lensHeight, TAILLIGHT_LENS_BULGE, TAILLIGHT_FLUTE_COUNT, TAILLIGHT_FLUTE_DEPTH, 'horizontal')
     lensGeometry.rotateY(Math.PI)
     const lens = finish(new THREE.Mesh(lensGeometry, materials.taillightLens), false)
-    lens.position.set(barX, 0, 0.3)
+    lens.position.set(barX, 0, 0.2)
     group.add(lens)
+    // Each lens wears its own thin chrome bezel inside the cluster frame.
+    const bezel = finish(
+      new THREE.Mesh(
+        buildFrame(lensWidth + TAILLIGHT_LENS_BEZEL_WIDTH * 2, lensHeight + TAILLIGHT_LENS_BEZEL_WIDTH * 2, lensWidth, lensHeight, 0.3, 0.5),
+        materials.chrome,
+      ),
+    )
+    bezel.position.set(barX, 0, 0.05)
+    group.add(bezel)
   }
 
   return group
@@ -602,11 +614,11 @@ function buildBumper(materials: CarMaterials, z: number, wrapSign: 1 | -1, withG
   return group
 }
 
-function buildFrontBumper(materials: CarMaterials): THREE.Group {
-  const group = buildBumper(materials, FRONT_BUMPER_Z, -1, true)
-
+/** A black plate in a chrome frame, standing off a surface at `z` toward `facing` (+z nose, -z tail). */
+function buildLicensePlate(materials: CarMaterials, y: number, z: number, facing: 1 | -1): THREE.Group {
+  const group = new THREE.Group()
   const plateBacking = finish(new THREE.Mesh(new RoundedBoxGeometry(LICENSE_PLATE_WIDTH, LICENSE_PLATE_HEIGHT, 0.3, 2, 0.2), materials.blackTrim))
-  plateBacking.position.set(0, BUMPER_CENTER_Y, FRONT_BUMPER_Z + 0.6)
+  plateBacking.position.set(0, y, z + facing * 0.6)
   group.add(plateBacking)
 
   const plateFrame = finish(
@@ -622,14 +634,43 @@ function buildFrontBumper(materials: CarMaterials): THREE.Group {
       materials.chrome,
     ),
   )
-  plateFrame.position.set(0, BUMPER_CENTER_Y, FRONT_BUMPER_Z + 0.45)
+  plateFrame.position.set(0, y, z + facing * 0.45)
   group.add(plateFrame)
+  return group
+}
 
+function buildFrontBumper(materials: CarMaterials): THREE.Group {
+  const group = buildBumper(materials, FRONT_BUMPER_Z, -1, true)
+  group.add(buildLicensePlate(materials, BUMPER_CENTER_Y, FRONT_BUMPER_Z, 1))
+  return group
+}
+
+/** A round chrome-bezelled backup light, its clear lens facing the tail (-z). */
+function buildBackupLight(materials: CarMaterials): THREE.Group {
+  const group = new THREE.Group()
+  const radius = BACKUP_LIGHT_DIAMETER / 2
+  const bezel = finish(new THREE.Mesh(new THREE.CylinderGeometry(radius + 0.35, radius + 0.35, 1, 24), materials.chrome))
+  bezel.rotation.x = Math.PI / 2
+  group.add(bezel)
+  const lens = finish(new THREE.Mesh(new THREE.CircleGeometry(radius, 24), materials.headlightLens), false)
+  lens.rotation.y = Math.PI
+  lens.position.z = -0.52
+  group.add(lens)
   return group
 }
 
 function buildRearBumper(materials: CarMaterials): THREE.Group {
-  return buildBumper(materials, REAR_BUMPER_Z, 1, false)
+  const group = buildBumper(materials, REAR_BUMPER_Z, 1, false)
+  // The plate and backup lights hang in the valance below the blade, as on the 1969 car.
+  group.add(buildLicensePlate(materials, REAR_PLATE_Y, TAIL_Z - 0.1, -1))
+  for (const sign of [-1, 1] as const) {
+    const lamp = buildBackupLight(materials)
+    // The valance bows forward toward its ends (see buildRearValance); sit the lamp in that bow.
+    const bow = 2 * (BACKUP_LIGHT_X / TAIL_PANEL_HALF_WIDTH) ** 2
+    lamp.position.set(sign * BACKUP_LIGHT_X, BACKUP_LIGHT_Y, TAIL_Z + bow - 0.6)
+    group.add(lamp)
+  }
+  return group
 }
 
 // -------------------------------------------------------------------------------------------
@@ -947,7 +988,7 @@ export function buildTrim(materials: CarMaterials): PartBuild[] {
   parts.push({ id: 'doorHandles', objects: [doorHandleLeft, doorHandleRight] })
 
   const fuelCap = tagPart(buildFuelCap(materials), 'fuelCap')
-  fuelCap.position.set(0, FUEL_CAP_Y, TAIL_Z + 0.9)
+  fuelCap.position.set(0, FUEL_CAP_Y, TAIL_PANEL_FACE_Z - 0.3)
   parts.push({ id: 'fuelCap', objects: [fuelCap] })
 
   const exhaustTips = new THREE.Group()

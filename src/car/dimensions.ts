@@ -168,16 +168,28 @@ export const TURN_SIGNAL_Y = 14.5
 // Rear end
 // -------------------------------------------------------------------------------------------
 
-/** Three vertical taillight bars per side in the recessed tail panel. */
-export const TAILLIGHT_BAR_WIDTH = 3.2
-export const TAILLIGHT_BAR_HEIGHT = 9
-export const TAILLIGHT_BAR_GAP = 1.2
-export const TAILLIGHT_CENTER_X = 21
-export const TAILLIGHT_Y = 30
-export const TAILLIGHT_Z = TAIL_Z + 0.6
+/** The tail corners round in plan over the last inches, so the quarters wrap into the tail panel. */
+export const TAIL_CORNER_RADIUS = 6
+/** The recessed tail panel spans the flat between the rounded corners. */
+export const TAIL_PANEL_HALF_WIDTH = TAIL_HALF_WIDTH - TAIL_CORNER_RADIUS
+/** How far the tail panel's face sits in from the quarter ends, behind a rolled lip. */
+export const TAIL_PANEL_RECESS = 2.5
+export const TAIL_PANEL_FACE_Z = TAIL_Z + 0.3 + TAIL_PANEL_RECESS
+/** Three vertical taillight lenses per side, each in its own chrome bezel, on the recessed face. */
+export const TAILLIGHT_BAR_WIDTH = 3.4
+export const TAILLIGHT_BAR_HEIGHT = 8.5
+export const TAILLIGHT_BAR_GAP = 1
+export const TAILLIGHT_CENTER_X = 18.5
+export const TAILLIGHT_Y = 30.2
+export const TAILLIGHT_Z = TAIL_PANEL_FACE_Z - 0.5
 /** The pop-open fuel cap in the centre of the tail panel. */
 export const FUEL_CAP_DIAMETER = 5.5
-export const FUEL_CAP_Y = 30.5
+export const FUEL_CAP_Y = 30.2
+/** The licence plate and round backup lights in the rear valance, below the bumper. */
+export const REAR_PLATE_Y = 15.5
+export const BACKUP_LIGHT_X = 23.5
+export const BACKUP_LIGHT_Y = 15.5
+export const BACKUP_LIGHT_DIAMETER = 3.2
 /** Dual exhaust tips through the rear valance. */
 export const EXHAUST_TIP_X = 17
 export const EXHAUST_TIP_Y = 10.5

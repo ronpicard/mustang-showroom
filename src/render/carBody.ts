@@ -12,8 +12,6 @@ import {
   EXHAUST_TIP_X,
   EXHAUST_TIP_Y,
   FRONT_AXLE_Z,
-  FUEL_CAP_DIAMETER,
-  FUEL_CAP_Y,
   GRILLE_BOTTOM_Y,
   GRILLE_HALF_WIDTH,
   HEADLIGHT_DIAMETER,
@@ -37,11 +35,10 @@ import {
   ROOF_HALF_WIDTH,
   ROOF_REAR_Z,
   TAIL_BOTTOM_Y,
-  TAIL_HALF_WIDTH,
+  TAIL_PANEL_HALF_WIDTH,
+  TAIL_PANEL_RECESS,
   TAIL_TOP_Y,
   TAIL_Z,
-  TAILLIGHT_CENTER_X,
-  TAILLIGHT_Y,
   TRUNK_FRONT_Z,
   TRUNK_REAR_Z,
   TURN_SIGNAL_X,
@@ -311,22 +308,8 @@ function insideCircleXY(p: THREE.Vector3, c: { x: number; y: number; r: number }
   return a * a + b * b < c.r * c.r
 }
 
-function insideEllipseXY(p: THREE.Vector3, e: { x: number; y: number; rx: number; ry: number }): boolean {
-  const dx = (p.x - e.x) / e.rx
-  const dy = (p.y - e.y) / e.ry
-  return dx * dx + dy * dy < 1
-}
-
 function circlePatch(x: number, y: number, z: number, r: number, facing: 1 | -1): THREE.BufferGeometry {
   const geo = new THREE.CircleGeometry(r, 20)
-  if (facing === -1) geo.rotateY(Math.PI)
-  geo.translate(x, y, z)
-  return geo
-}
-
-function ellipsePatch(x: number, y: number, z: number, rx: number, ry: number, facing: 1 | -1): THREE.BufferGeometry {
-  const geo = new THREE.CircleGeometry(1, 24)
-  geo.scale(rx, ry, 1)
   if (facing === -1) geo.rotateY(Math.PI)
   geo.translate(x, y, z)
   return geo
@@ -705,34 +688,29 @@ const buildQuarterRight = (materials: CarMaterials): PartBuild => buildQuarterSi
 // -------------------------------------------------------------------------------------------
 
 function buildRearPanel(materials: CarMaterials): PartBuild {
-  const XSEG = 22
-  const YSEG = 12
-  const z = TAIL_Z + 1.2
-  const halfWidth = TAIL_HALF_WIDTH - 1
+  const XSEG = 44
+  const YSEG = 18
+  const halfWidth = TAIL_PANEL_HALF_WIDTH - 0.3
+  const lipWidth = 1.8
+  const lipZ = TAIL_Z + 0.3
   const rows: THREE.Vector3[][] = []
+  // The face sits `TAIL_PANEL_RECESS` in from the quarter ends and rolls out to a lip at every edge.
   for (let i = 0; i <= YSEG; i++) {
     const y = TAIL_BOTTOM_Y + (TAIL_TOP_Y - TAIL_BOTTOM_Y) * (i / YSEG)
     const row: THREE.Vector3[] = []
     for (let j = 0; j <= XSEG; j++) {
-      row.push(new THREE.Vector3(halfWidth * ((j / XSEG) * 2 - 1), y, z))
+      const x = halfWidth * ((j / XSEG) * 2 - 1)
+      const edge = Math.min(halfWidth - Math.abs(x), y - TAIL_BOTTOM_Y, TAIL_TOP_Y - y)
+      row.push(new THREE.Vector3(x, y, lipZ + TAIL_PANEL_RECESS * THREE.MathUtils.smoothstep(edge, 0, lipWidth)))
     }
     rows.push(row)
   }
-  const tailA = { x: TAILLIGHT_CENTER_X, y: TAILLIGHT_Y, rx: 6.5, ry: 5.2 }
-  const tailB = { x: -TAILLIGHT_CENTER_X, y: TAILLIGHT_Y, rx: 6.5, ry: 5.2 }
-  const fuelR = FUEL_CAP_DIAMETER / 2 + 0.3
-  const outerGeom = gridGeometry(
-    rows,
-    false,
-    (p) => insideEllipseXY(p, tailA) || insideEllipseXY(p, tailB) || insideCircleXY(p, { x: 0, y: FUEL_CAP_Y, r: fuelR }),
-  )
-  const backing = mergeGeometries([
-    ellipsePatch(tailA.x, tailA.y, z - 0.6, tailA.rx, tailA.ry, -1),
-    ellipsePatch(tailB.x, tailB.y, z - 0.6, tailB.rx, tailB.ry, -1),
-    circlePatch(0, FUEL_CAP_Y, z - 0.4, fuelR, -1),
-  ])
+  // The top lip rolls forward under the trunk lid's rear edge, so the deck reads as one rounded edge.
+  for (const [rise, forward] of [[0.25, 0.6], [0.4, 1.3], [0.45, 1.9]] as const) {
+    rows.push(rows[YSEG].map((p) => new THREE.Vector3(p.x, TAIL_TOP_Y + rise, lipZ + forward)))
+  }
   const g = new THREE.Group()
-  g.add(mesh(outerGeom, materials.paint), mesh(backing, materials.satinBlack))
+  g.add(mesh(gridGeometry(rows, false), materials.paint))
   g.name = 'rearPanel'
   tagPart(g, 'rearPanel')
   return { id: 'rearPanel', objects: [g] }
@@ -811,7 +789,7 @@ function buildRearValance(materials: CarMaterials): PartBuild {
   const YSEG = 10
   const yLow = ROCKER_TOP_Y - 3.5 // rocker bottom is not exported for the valance; close enough
   const yHigh = TAIL_BOTTOM_Y - PANEL_GAP
-  const halfWidth = TAIL_HALF_WIDTH - 1
+  const halfWidth = TAIL_PANEL_HALF_WIDTH - 0.3
   const rows: THREE.Vector3[][] = []
   for (let i = 0; i <= YSEG; i++) {
     const y = yLow + (yHigh - yLow) * (i / YSEG)

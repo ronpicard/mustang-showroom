@@ -26,6 +26,7 @@ import {
   ROOF_REAR_Z,
   ROOF_Y,
   TAIL_BOTTOM_Y,
+  TAIL_CORNER_RADIUS,
   TAIL_HALF_WIDTH,
   TAIL_TOP_Y,
   TAIL_Z,
@@ -189,9 +190,16 @@ function quarterBeltY(z: number): number {
   return QUARTER_KICK_BELT_Y + (TAIL_BELT_Y - QUARTER_KICK_BELT_Y) * zT(z, QUARTER_KICK_Z, TAIL_Z)
 }
 
+/** How far the side tucks inward at `z` as the tail corner rounds (a quarter circle in plan). */
+function tailCornerTuck(z: number): number {
+  const ahead = z - TAIL_Z
+  if (ahead >= TAIL_CORNER_RADIUS) return 0
+  return TAIL_CORNER_RADIUS - Math.sqrt(Math.max(0, TAIL_CORNER_RADIUS ** 2 - (TAIL_CORNER_RADIUS - ahead) ** 2))
+}
+
 function quarterHalfWidth(z: number): number {
   if (z >= TAPER_START_Z) return BODY_HALF_WIDTH
-  return BODY_HALF_WIDTH + (TAIL_HALF_WIDTH - BODY_HALF_WIDTH) * zT(z, TAPER_START_Z, TAIL_Z)
+  return BODY_HALF_WIDTH + (TAIL_HALF_WIDTH - BODY_HALF_WIDTH) * zT(z, TAPER_START_Z, TAIL_Z) - tailCornerTuck(z)
 }
 
 /** Where the lower body stops being quarter-panel sheet metal and becomes rear-valance height,
@@ -212,7 +220,7 @@ function quarterDeckTop(z: number): { center: readonly [number, number]; crease:
   return {
     center: [0, DECK_Y + (TAIL_TOP_Y - DECK_Y) * t],
     crease: [
-      DECK_CREASE_HALF_WIDTH_NEAR + (DECK_CREASE_HALF_WIDTH_FAR - DECK_CREASE_HALF_WIDTH_NEAR) * t,
+      DECK_CREASE_HALF_WIDTH_NEAR + (DECK_CREASE_HALF_WIDTH_FAR - DECK_CREASE_HALF_WIDTH_NEAR) * t - tailCornerTuck(z),
       DECK_Y - 0.3 + (TAIL_TOP_Y - 0.3 - (DECK_Y - 0.3)) * t,
     ],
   }
@@ -247,7 +255,12 @@ const HOOD_MID_2_Z = 68
 const HOOD_MID_3_Z = 48
 const DOOR_MID_Z = (DOOR_FRONT_Z + DOOR_REAR_Z) / 2
 const QUARTER_SCOOP_Z = -45
-const QUARTER_TAIL_TAPER_Z = TAIL_Z + 4
+/**
+ * Stations through the rounded tail corner, so the sampled contour follows its arc. The last one
+ * stays 1.6 in ahead of the tail: any closer and the arc's near-vertical run bends the sampled
+ * curve harder than the panels' tangent continuity allows.
+ */
+const TAIL_CORNER_STATION_Z = [TAIL_CORNER_RADIUS, 3.5, 1.6].map((ahead) => TAIL_Z + ahead)
 
 export const STATIONS: readonly Station[] = [
   NOSE,
@@ -261,8 +274,8 @@ export const STATIONS: readonly Station[] = [
   quarterStation(QUARTER_SCOOP_Z),
   quarterStation(REAR_GLASS_BASE_Z),
   quarterStation(QUARTER_KICK_Z),
-  quarterStation((QUARTER_KICK_Z + QUARTER_TAIL_TAPER_Z) / 2),
-  quarterStation(QUARTER_TAIL_TAPER_Z),
+  quarterStation((QUARTER_KICK_Z + TAIL_CORNER_STATION_Z[0]) / 2),
+  ...TAIL_CORNER_STATION_Z.map((z) => quarterStation(z)),
   quarterStation(TAIL_Z),
 ]
 

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import * as THREE from 'three'
-import { FRONT_AXLE_Z, HOOD_PIN_X, HOOD_PIN_Z, HOOD_SCOOP_REAR_Z, REAR_AXLE_Z, ROCKER_BOTTOM_Y, ROCKER_TOP_Y, TURN_SIGNAL_X, TURN_SIGNAL_Y, WHEEL_ARCH_CENTER_Y, WHEEL_ARCH_RADIUS } from '../car/dimensions.ts'
+import { FRONT_AXLE_Z, HOOD_PIN_X, HOOD_PIN_Z, HOOD_SCOOP_REAR_Z, REAR_AXLE_Z, TAIL_CORNER_RADIUS, TAIL_HALF_WIDTH, TAIL_PANEL_FACE_Z, TAIL_PANEL_HALF_WIDTH, TAIL_Z, ROCKER_BOTTOM_Y, ROCKER_TOP_Y, TURN_SIGNAL_X, TURN_SIGNAL_Y, WHEEL_ARCH_CENTER_Y, WHEEL_ARCH_RADIUS } from '../car/dimensions.ts'
 import type { PartId } from '../car/types.ts'
 import { createCarAssembly } from './carAssembly.ts'
 import { stationAt } from './bodyProfile.ts'
@@ -190,4 +190,51 @@ test('the engine block and sump stay above the rocker line', () => {
     assert.ok(box.min.y >= ROCKER_BOTTOM_Y - 0.01, `engine block reaches down to y=${box.min.y.toFixed(2)}`)
   }
   assembly.dispose()
+})
+
+test('the tail rounds into a recessed panel whose lights face the viewer', () => {
+  // The quarters tuck in through the corner radius so the tail panel sits between rounded ends.
+  const tail = stationAt(TAIL_Z)
+  assert.ok(Math.abs(tail.belt[0] - (TAIL_HALF_WIDTH - TAIL_CORNER_RADIUS)) < 0.8, `tail width ${tail.belt[0]}`)
+  assert.ok(tail.crease[0] < tail.belt[0], 'the deck shoulder must stay inside the rounded corner')
+  assert.ok(stationAt(TAIL_Z + TAIL_CORNER_RADIUS + 1).belt[0] > TAIL_HALF_WIDTH - 1, 'full width ahead of the corner')
+
+  const assembly = createCarAssembly()
+  try {
+    assembly.group.updateMatrixWorld(true)
+    const panel = assembly.partObjects('rearPanel')[0]!
+    const panelBox = new THREE.Box3().setFromObject(panel)
+    assert.ok(panelBox.max.x <= TAIL_PANEL_HALF_WIDTH && panelBox.min.z >= TAIL_Z, `panel box ${panelBox.min.toArray()} ${panelBox.max.toArray()}`)
+    // Its centre is recessed to the face depth; its edges roll out to the lip behind it.
+    const position = (panel.children[0] as THREE.Mesh).geometry.getAttribute('position')
+    let centreZ = Number.NaN
+    let best = Infinity
+    for (let i = 0; i < position.count; i++) {
+      const score = Math.abs(position.getX(i)) + Math.abs(position.getY(i) - 30)
+      if (score < best) {
+        best = score
+        centreZ = position.getZ(i)
+      }
+    }
+    assert.ok(Math.abs(centreZ - TAIL_PANEL_FACE_Z) < 0.05, `centre z ${centreZ}`)
+    assert.ok(panelBox.min.z < TAIL_PANEL_FACE_Z - 2, 'the lip sits behind the face')
+
+    for (const cluster of assembly.partObjects('taillights')) {
+      const box = new THREE.Box3().setFromObject(cluster)
+      assert.ok(box.max.x < TAIL_PANEL_HALF_WIDTH - 1 && box.min.x > -TAIL_PANEL_HALF_WIDTH + 1, 'cluster within the panel')
+      const lenses = cluster.children.filter((c) => (c as THREE.Mesh).material === assembly.materials.taillightLens)
+      assert.equal(lenses.length, 3)
+      const lensZ = Math.min(...lenses.map((lens) => new THREE.Box3().setFromObject(lens).min.z))
+      // Nothing opaque in the cluster may sit behind (rearward of, -z) the lens faces except the bezels around them.
+      for (const child of cluster.children) {
+        if (lenses.includes(child)) continue
+        const childBox = new THREE.Box3().setFromObject(child)
+        const overlapsLens = childBox.min.x < lenses[0]!.position.x + 1 && childBox.max.x > lenses[0]!.position.x - 1 && Math.abs(childBox.min.y - childBox.max.y) < 9.5
+        const isSolid = (child as THREE.Mesh).geometry.type === 'BoxGeometry'
+        if (isSolid && overlapsLens) assert.ok(childBox.min.z > lensZ, 'a solid backing must not hide the lenses')
+      }
+    }
+  } finally {
+    assembly.dispose()
+  }
 })

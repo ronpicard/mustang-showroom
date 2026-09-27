@@ -211,6 +211,8 @@ const EXHAUST_BEND_Z = 20
 const MUFFLER_FLATTEN_Y = 0.82
 /** Tailpipes rise over the axle and end just behind the chrome tips built in `carTrim.ts`. */
 const TAILPIPE_END_Z = TAIL_Z + 3
+/** How far ahead of the tail the rear frame rails end, clear of the valance's forward bow. */
+const REAR_RAIL_TAIL_MARGIN = 3
 const EXHAUST_HANGER_SIZE: readonly [number, number, number] = [1.6, 1, 1.2]
 
 // -------------------------------------------------------------------------------------------
@@ -386,8 +388,11 @@ function buildFloorPan(materials: CarMaterials): THREE.Group {
     group.add(rail)
   }
 
-  const rearRailLength = REAR_SEAT_Z - TAIL_Z
-  const rearRailCenterZ = (REAR_SEAT_Z + TAIL_Z) / 2
+  // The rear rails stop short of the tail: the valance bows forward toward its ends, and rails
+  // run through to the tail showed as dark squares beside the exhaust tips from behind.
+  const rearRailEndZ = TAIL_Z + REAR_RAIL_TAIL_MARGIN
+  const rearRailLength = REAR_SEAT_Z - rearRailEndZ
+  const rearRailCenterZ = (REAR_SEAT_Z + rearRailEndZ) / 2
   for (const side of [-1, 1]) {
     const rail = boxMesh(FRAME_RAIL_WIDTH, FRAME_RAIL_HEIGHT, rearRailLength, materials.steelDark, 0.25)
     rail.position.set(side * REAR_FRAME_RAIL_X, frameRailCenterY, rearRailCenterZ)
