@@ -40,6 +40,8 @@ export interface CarMaterials {
   gaugeFace: THREE.MeshStandardMaterial
   castIron: THREE.MeshStandardMaterial
   aluminium: THREE.MeshStandardMaterial
+  /** Gunmetal grey wheel spokes and dish, machined rather than chromed. */
+  wheelSpoke: THREE.MeshStandardMaterial
   /** Dark painted steel: chassis, suspension arms, axle housing, floor pan. */
   steelDark: THREE.MeshStandardMaterial
   /** Bare bright steel: driveshaft, exhaust pipes, springs. */
@@ -130,11 +132,11 @@ export function createCarMaterials(): CarMaterials {
     roughness: 0.26,
     roughnessMap: paintMicrotexture,
     clearcoat: 1,
-    clearcoatRoughness: 0.035,
+    clearcoatRoughness: 0.12,
     envMapIntensity: 1.0,
     side: THREE.DoubleSide,
   })
-  const satinBlack = new THREE.MeshStandardMaterial({ color: 0x151517, roughness: 0.6, metalness: 0.2, side: THREE.DoubleSide })
+  const satinBlack = new THREE.MeshStandardMaterial({ color: 0x050507, roughness: 0.75, metalness: 0.05, side: THREE.DoubleSide })
   const chrome = new THREE.MeshStandardMaterial({
     color: 0xf2f4f6,
     metalness: 1,
@@ -214,6 +216,7 @@ export function createCarMaterials(): CarMaterials {
     bumpMap: castMicrotexture, bumpScale: 0.02, metalness: 0.6,
   })
   const aluminium = new THREE.MeshStandardMaterial({ color: 0xb4b8bc, roughness: 0.45, metalness: 0.9 })
+  const wheelSpoke = new THREE.MeshStandardMaterial({ color: 0x8e9296, metalness: 0.7, roughness: 0.38, envMapIntensity: 1.0 })
   const steelDark = new THREE.MeshStandardMaterial({ color: 0x27292c, roughness: 0.62, metalness: 0.7 })
   const steelBright = new THREE.MeshStandardMaterial({ color: 0x8c9196, roughness: 0.33, metalness: 0.95 })
   const brakeRotor = new THREE.MeshStandardMaterial({ color: 0x74787c, roughness: 0.5, metalness: 0.9 })
@@ -239,6 +242,7 @@ export function createCarMaterials(): CarMaterials {
     gaugeFace,
     castIron,
     aluminium,
+    wheelSpoke,
     steelDark,
     steelBright,
     brakeRotor,
@@ -266,6 +270,7 @@ export function createCarMaterials(): CarMaterials {
     gaugeFace,
     castIron,
     aluminium,
+    wheelSpoke,
     steelDark,
     steelBright,
     brakeRotor,
@@ -276,7 +281,7 @@ export function createCarMaterials(): CarMaterials {
       paint.color.set(info.hex)
       // Keep both solid and metallic finishes deep and glossy beneath the clearcoat.
       const metallic = THREE.MathUtils.clamp(info.metallic, 0, 1)
-      paint.metalness = 0.05 + 0.43 * metallic
+      paint.metalness = 0.05 + 0.75 * metallic
       paint.roughness = 0.26 + 0.02 * metallic
       paint.needsUpdate = true
     },

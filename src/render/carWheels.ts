@@ -13,8 +13,8 @@ import type { CarMaterials } from './carMaterials.ts'
 import { tagPart, type PartBuild } from './partBuild.ts'
 
 /**
- * The Magnum 500 wheel and F60-15 tyre, plus the disc/drum brakes behind them, at the four
- * `WHEEL_CENTERS`. Every part is authored in a local frame where Y is the wheel's spin axis
+ * The polished five-spoke wheels and low-profile tyres, plus the disc/drum brakes behind them, at
+ * the four `WHEEL_CENTERS`. Every part is authored in a local frame where Y is the wheel's spin axis
  * (matching the revolve axis `THREE.LatheGeometry`/`THREE.CylinderGeometry` use natively) and X/Z
  * are the radial plane, then rotated so the spin axis lies along car space's X. Rotating by
  * +90 deg about Z sends local +Y (which we build as the outboard/visible face) to world -X, the
@@ -47,7 +47,7 @@ const TREAD_BASE_RADIUS = TIRE_RADIUS - 0.12
 
 /** Where the bead meets the rim; a hair proud of `RIM_RADIUS` so the tyre reads as seated on it. */
 const TIRE_BEAD_RADIUS = RIM_RADIUS + 0.3
-const TIRE_TREAD_HALF_WIDTH = 2.25
+const TIRE_TREAD_HALF_WIDTH = 3.1
 const GROOVE_DEPTH = 0.1
 const GROOVE_HALF_WIDTH = 0.12
 const GROOVE_CENTER_OFFSET = 0.72
@@ -55,43 +55,35 @@ const TREAD_BLOCK_COUNT = 56
 const TREAD_BLOCK_AXIAL_LENGTH = 0.8
 const TREAD_BLOCK_FILL = 0.68
 
-const LETTER_RADIUS = 10.35
-const LETTER_GLYPH_WIDTH = 1.15
-const LETTER_GLYPH_HEIGHT = 1.3
-const LETTER_STROKE_WIDTH = 0.13
-const LETTER_HEIGHT = 0.12
-const WHITE_LETTER_COLOR = 0xe3dac2
-const WHITE_LETTER_ROUGHNESS = 0.9
-
 // -------------------------------------------------------------------------------------------
-// Magnum 500 rim
+// Polished five-spoke rim
 // -------------------------------------------------------------------------------------------
 
 /** The chrome lip's outer, tyre-facing edge; the rim's full axial half-width. */
 const RIM_LIP_OUTER_Y = HALF_RIM_WIDTH
-/** The black centre dish sits this far axially inboard of the lip's outer face. */
-const RIM_DISH_DEPTH = 2.5
+/** The gunmetal centre dish sits this far axially inboard of the lip's outer face. */
+const RIM_DISH_DEPTH = 3.0
 const RIM_DISH_Y = RIM_LIP_OUTER_Y - RIM_DISH_DEPTH
 /** Radius of the plain inboard barrel, a touch inside the tyre bead. */
 const RIM_BARREL_RADIUS = RIM_RADIUS - 1
 /** The barrel's inboard-most edge, the rim's full axial half-width on the inboard side. */
 const RIM_BARREL_INNER_Y = -HALF_RIM_WIDTH
-/** Where the centre dish meets the chrome lip. */
-const RIM_DISH_OUTER_RADIUS = RIM_RADIUS - 1
+/** Where the centre dish meets the chrome lip's inner edge. */
+const RIM_DISH_OUTER_RADIUS = RIM_RADIUS - 2.0
 /** Where the spokes and cap meet the dish; the hub's visible radius. */
 const HUB_RADIUS = 2.2
 
 const SPOKE_COUNT = 5
 const SPOKE_ANGLE_STEP = (Math.PI * 2) / SPOKE_COUNT
-/** Spokes run from the hub out to just under the chrome lip. */
-const SPOKE_OUTER_RADIUS = RIM_RADIUS - 0.3
-const SPOKE_HUB_WIDTH = 1.2
-/** Spokes fan out wider toward the lip, per the Magnum 500's five-spoke face. */
-const SPOKE_RIM_WIDTH = 2.4
-const SPOKE_PROUD_HEIGHT = 0.55
-const SPOKE_ROUND_RADIUS = 0.14
+/** Spokes run from the hub out to the lip's inner edge, where they meet it. */
+const SPOKE_OUTER_RADIUS = RIM_DISH_OUTER_RADIUS
+const SPOKE_HUB_WIDTH = 2.6
+/** Spokes fan out wider toward the lip, in the Torq Thrust's straight-sided five-spoke style. */
+const SPOKE_RIM_WIDTH = 3.4
+const SPOKE_PROUD_HEIGHT = 1.1
+const SPOKE_ROUND_RADIUS = 0.2
 
-const CENTER_CAP_RADIUS = 1.6
+const CENTER_CAP_RADIUS = 1.3
 const CENTER_CAP_Y = RIM_DISH_Y + 1.6
 
 const LUG_NUT_COUNT = 5
@@ -187,20 +179,42 @@ function forMerge(geometries: THREE.BufferGeometry[]): THREE.BufferGeometry[] {
 // Tyre geometry
 // -------------------------------------------------------------------------------------------
 
-/** Radius / axial stations from the bead across the rounded outboard sidewall to the tread. */
-const OUTBOARD_SIDEWALL = [
-  new THREE.Vector2(RIM_RADIUS, HALF_TIRE_WIDTH - 1),
-  new THREE.Vector2(TIRE_BEAD_RADIUS, HALF_TIRE_WIDTH - 0.55),
-  new THREE.Vector2(8.6, HALF_TIRE_WIDTH - 0.25),
-  new THREE.Vector2(9.5, HALF_TIRE_WIDTH - 0.08),
-  new THREE.Vector2(10.5, HALF_TIRE_WIDTH - 0.04),
-  new THREE.Vector2(11.3, HALF_TIRE_WIDTH - 0.1),
-  new THREE.Vector2(12, HALF_TIRE_WIDTH - 0.36),
-  new THREE.Vector2(12.45, HALF_TIRE_WIDTH - 0.75),
-  new THREE.Vector2(12.78, HALF_TIRE_WIDTH - 1.35),
-  new THREE.Vector2(12.96, HALF_TIRE_WIDTH - 1.9),
-  new THREE.Vector2(TREAD_BASE_RADIUS, TIRE_TREAD_HALF_WIDTH),
-]
+/**
+ * Radius / axial stations from the bead across the rounded outboard sidewall to the tread,
+ * generated from a normalised t in [0, 1] running from the bead (`TIRE_BEAD_RADIUS`) to the
+ * tread base (`TREAD_BASE_RADIUS`). The low-profile sidewall bulges out to the tyre's full
+ * half-width by t = 0.5, then eases into the tread's (narrower) half-width over the last 30%
+ * of t with a smooth, quarter-ellipse-like shoulder.
+ */
+const SIDEWALL_STATION_COUNT = 12
+const SIDEWALL_SHOULDER_START = 0.7
+
+function buildOutboardSidewall(): THREE.Vector2[] {
+  const bulgeHalfWidth = HALF_TIRE_WIDTH - 0.9
+  const stations: THREE.Vector2[] = []
+  for (let i = 0; i < SIDEWALL_STATION_COUNT; i += 1) {
+    const t = i / (SIDEWALL_STATION_COUNT - 1)
+    const radius = THREE.MathUtils.lerp(TIRE_BEAD_RADIUS, TREAD_BASE_RADIUS, t)
+    let halfWidth: number
+    if (t <= 0.5) {
+      // Smoothstep from the bead up to the tyre's full bulge.
+      const bulgeT = t / 0.5
+      const eased = bulgeT * bulgeT * (3 - 2 * bulgeT)
+      halfWidth = THREE.MathUtils.lerp(bulgeHalfWidth, HALF_TIRE_WIDTH, eased)
+    } else if (t <= SIDEWALL_SHOULDER_START) {
+      halfWidth = HALF_TIRE_WIDTH
+    } else {
+      // Quarter-ellipse shoulder rounding the bulge into the tread's half-width.
+      const shoulderT = (t - SIDEWALL_SHOULDER_START) / (1 - SIDEWALL_SHOULDER_START)
+      const angle = shoulderT * (Math.PI / 2)
+      halfWidth = TIRE_TREAD_HALF_WIDTH + (HALF_TIRE_WIDTH - TIRE_TREAD_HALF_WIDTH) * Math.cos(angle)
+    }
+    stations.push(new THREE.Vector2(radius, halfWidth))
+  }
+  return stations
+}
+
+const OUTBOARD_SIDEWALL = buildOutboardSidewall()
 
 function buildTireProfile(): THREE.Vector2[] {
   const grooveOuter = GROOVE_CENTER_OFFSET + GROOVE_HALF_WIDTH
@@ -241,109 +255,22 @@ function buildTireGeometry(): THREE.BufferGeometry {
   return mergeGeometries(forMerge([body, ...firstRow, ...secondRow]))
 }
 
-/** Simple strokes in unit glyph coordinates: tangential X and radial Z. */
-type LetterStroke = readonly [number, number, number, number]
-const LETTER_GLYPHS: Record<string, readonly LetterStroke[]> = {
-  R: [[0, 0, 0, 1], [0, 1, 0.7, 1], [0.7, 1, 0.85, 0.8], [0.85, 0.8, 0.7, 0.58], [0.7, 0.58, 0, 0.58], [0.4, 0.58, 0.9, 0]],
-  A: [[0, 0, 0.4, 1], [0.4, 1, 0.6, 1], [0.6, 1, 1, 0], [0.17, 0.42, 0.83, 0.42]],
-  D: [[0, 0, 0, 1], [0, 1, 0.62, 1], [0.62, 1, 0.9, 0.75], [0.9, 0.75, 0.9, 0.25], [0.9, 0.25, 0.62, 0], [0.62, 0, 0, 0]],
-  I: [[0.15, 1, 0.85, 1], [0.5, 1, 0.5, 0], [0.15, 0, 0.85, 0]],
-  L: [[0, 1, 0, 0], [0, 0, 0.85, 0]],
-  G: [[0.9, 0.82, 0.65, 1], [0.65, 1, 0.2, 1], [0.2, 1, 0, 0.75], [0, 0.75, 0, 0.25], [0, 0.25, 0.2, 0], [0.2, 0, 0.9, 0], [0.9, 0, 0.9, 0.48], [0.9, 0.48, 0.53, 0.48]],
-  T: [[0, 1, 1, 1], [0.5, 1, 0.5, 0]],
-  F: [[0, 0, 0, 1], [0, 1, 0.9, 1], [0, 0.52, 0.7, 0.52]],
-  6: [[0.85, 1, 0.3, 1], [0.3, 1, 0, 0.58], [0, 0.58, 0, 0.2], [0, 0.2, 0.25, 0], [0.25, 0, 0.72, 0], [0.72, 0, 0.9, 0.22], [0.9, 0.22, 0.72, 0.5], [0.72, 0.5, 0, 0.5]],
-  0: [[0.25, 0, 0.75, 0], [0.75, 0, 0.95, 0.25], [0.95, 0.25, 0.95, 0.75], [0.95, 0.75, 0.75, 1], [0.75, 1, 0.25, 1], [0.25, 1, 0.05, 0.75], [0.05, 0.75, 0.05, 0.25], [0.05, 0.25, 0.25, 0]],
-  '-': [[0.2, 0.5, 0.8, 0.5]],
-  1: [[0.2, 0.75, 0.55, 1], [0.55, 1, 0.55, 0], [0.2, 0, 0.9, 0]],
-  5: [[0.9, 1, 0.1, 1], [0.1, 1, 0.1, 0.53], [0.1, 0.53, 0.72, 0.53], [0.72, 0.53, 0.9, 0.28], [0.9, 0.28, 0.72, 0], [0.72, 0, 0.1, 0]],
-}
-
-function sidewallAxialY(radius: number): number {
-  for (let i = 1; i < OUTBOARD_SIDEWALL.length; i += 1) {
-    const outer = OUTBOARD_SIDEWALL[i]
-    if (radius <= outer.x) {
-      const inner = OUTBOARD_SIDEWALL[i - 1]
-      return THREE.MathUtils.lerp(inner.y, outer.y, (radius - inner.x) / (outer.x - inner.x))
-    }
-  }
-  return OUTBOARD_SIDEWALL[OUTBOARD_SIDEWALL.length - 1].y
-}
-
-/** Thin raised strokes follow the sidewall surface and the two text arcs. */
-function buildLetterGeometry(mirrored: boolean): THREE.BufferGeometry {
-  const strokes: THREE.BufferGeometry[] = []
-  const topAngle = mirrored ? 0 : Math.PI
-  for (const [label, upper, spacing] of [['RADIAL GT', true, 0.18], ['F60-15', false, 0.19]] as const) {
-    const direction = upper ? 1 : -1
-    const arcCenter = topAngle + (upper ? 0 : Math.PI)
-    for (let index = 0; index < label.length; index += 1) {
-      const glyph = LETTER_GLYPHS[label[index]] ?? []
-      const centerAngle = arcCenter + (index - (label.length - 1) / 2) * spacing * direction
-      for (const [x1, z1, x2, z2] of glyph) {
-        const dx = (x2 - x1) * LETTER_GLYPH_WIDTH
-        const dz = (z2 - z1) * LETTER_GLYPH_HEIGHT
-        const stroke = new THREE.BoxGeometry(Math.hypot(dx, dz), LETTER_HEIGHT, LETTER_STROKE_WIDTH)
-        stroke.rotateY(-Math.atan2(dz, dx))
-        stroke.translate((x1 + x2) * LETTER_GLYPH_WIDTH / 2, 0, (z1 + z2) * LETTER_GLYPH_HEIGHT / 2)
-        const positions = stroke.getAttribute('position') as THREE.BufferAttribute
-        for (let vertex = 0; vertex < positions.count; vertex += 1) {
-          const angle = centerAngle + (positions.getX(vertex) / LETTER_GLYPH_WIDTH - 0.5) * LETTER_GLYPH_WIDTH / LETTER_RADIUS * direction
-          const radius = LETTER_RADIUS + (positions.getZ(vertex) / LETTER_GLYPH_HEIGHT - 0.5) * LETTER_GLYPH_HEIGHT * direction
-          const axialY = sidewallAxialY(radius) + 0.04 + positions.getY(vertex)
-          positions.setXYZ(vertex, radius * Math.cos(angle), axialY, radius * Math.sin(angle))
-        }
-        // The polar mapping reverses handedness; flip the triangles so the broad faces
-        // point out of the tire, rather than leaving only their thin edges visible.
-        const indexBuffer = stroke.getIndex()!
-        for (let i = 0; i < indexBuffer.count; i += 3) {
-          const b = indexBuffer.getX(i + 1)
-          indexBuffer.setX(i + 1, indexBuffer.getX(i + 2))
-          indexBuffer.setX(i + 2, b)
-        }
-        stroke.computeVertexNormals()
-        strokes.push(stroke)
-      }
-    }
-  }
-  return mergeGeometries(forMerge(strokes))
-}
-
 // -------------------------------------------------------------------------------------------
 // Rim geometry
 // -------------------------------------------------------------------------------------------
 
-/** Chrome: the outer lip (with its rolled bead), the five spokes, the centre cap and the lug nuts. */
+/** Chrome: the polished outer lip (with its rolled bead), the centre cap and the lug nuts. */
 function buildChromeGeometry(): THREE.BufferGeometry {
   const lip = new THREE.LatheGeometry(
     [
-      new THREE.Vector2(RIM_DISH_OUTER_RADIUS, RIM_DISH_Y + 0.5),
-      new THREE.Vector2(RIM_RADIUS - 0.5, RIM_DISH_Y + 1),
-      new THREE.Vector2(RIM_RADIUS, RIM_DISH_Y + 1.5),
-      new THREE.Vector2(RIM_RADIUS + 0.2, RIM_LIP_OUTER_Y - 0.5),
-      new THREE.Vector2(RIM_RADIUS - 0.1, RIM_LIP_OUTER_Y),
+      new THREE.Vector2(RIM_RADIUS - 2.0, RIM_LIP_OUTER_Y - 1.6),
+      new THREE.Vector2(RIM_RADIUS - 1.3, RIM_LIP_OUTER_Y - 1.2),
+      new THREE.Vector2(RIM_RADIUS - 0.5, RIM_LIP_OUTER_Y - 0.6),
+      new THREE.Vector2(RIM_RADIUS, RIM_LIP_OUTER_Y - 0.25),
+      new THREE.Vector2(RIM_RADIUS - 0.15, RIM_LIP_OUTER_Y),
     ],
     LATHE_SEGMENTS,
   )
-
-  const outline = new THREE.Shape()
-  outline.moveTo(HUB_RADIUS - 0.2, -SPOKE_HUB_WIDTH / 2)
-  outline.quadraticCurveTo(HUB_RADIUS + 1.8, -SPOKE_HUB_WIDTH / 2, SPOKE_OUTER_RADIUS, -SPOKE_RIM_WIDTH / 2)
-  outline.lineTo(SPOKE_OUTER_RADIUS, SPOKE_RIM_WIDTH / 2)
-  outline.quadraticCurveTo(HUB_RADIUS + 1.8, SPOKE_HUB_WIDTH / 2, HUB_RADIUS - 0.2, SPOKE_HUB_WIDTH / 2)
-  outline.closePath()
-  const oneSpoke = new THREE.ExtrudeGeometry(outline, {
-    depth: SPOKE_PROUD_HEIGHT, bevelEnabled: true, bevelThickness: SPOKE_ROUND_RADIUS,
-    bevelSize: SPOKE_ROUND_RADIUS, bevelSegments: 3, curveSegments: 8, steps: 1,
-  })
-  oneSpoke.rotateX(-Math.PI / 2)
-  oneSpoke.translate(0, RIM_DISH_Y + 0.45, 0)
-  const spokes: THREE.BufferGeometry[] = []
-  for (let i = 0; i < SPOKE_COUNT; i += 1) {
-    const spoke = oneSpoke.clone()
-    spoke.rotateY(i * SPOKE_ANGLE_STEP)
-    spokes.push(spoke)
-  }
 
   const cap = new THREE.SphereGeometry(CENTER_CAP_RADIUS, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2)
   cap.translate(0, CENTER_CAP_Y, 0)
@@ -360,12 +287,12 @@ function buildChromeGeometry(): THREE.BufferGeometry {
     lugNuts.push(lug)
   }
 
-  return mergeGeometries(forMerge([lip, ...spokes, cap, ...lugNuts]))
+  return mergeGeometries(forMerge([lip, cap, ...lugNuts]))
 }
 
-/** The black-painted centre dish, recessed behind the chrome lip. */
-function buildDishGeometry(): THREE.BufferGeometry {
-  return new THREE.LatheGeometry(
+/** Gunmetal: the recessed centre dish and the five straight, tapered Torq Thrust-style spokes. */
+function buildSpokesGeometry(): THREE.BufferGeometry {
+  const dish = new THREE.LatheGeometry(
     [
       new THREE.Vector2(HUB_RADIUS, RIM_DISH_Y),
       new THREE.Vector2(HUB_RADIUS + 0.6, RIM_DISH_Y + 0.35),
@@ -373,6 +300,27 @@ function buildDishGeometry(): THREE.BufferGeometry {
     ],
     LATHE_SEGMENTS,
   )
+
+  const outline = new THREE.Shape()
+  outline.moveTo(HUB_RADIUS - 0.2, -SPOKE_HUB_WIDTH / 2)
+  outline.lineTo(SPOKE_OUTER_RADIUS, -SPOKE_RIM_WIDTH / 2)
+  outline.lineTo(SPOKE_OUTER_RADIUS, SPOKE_RIM_WIDTH / 2)
+  outline.lineTo(HUB_RADIUS - 0.2, SPOKE_HUB_WIDTH / 2)
+  outline.closePath()
+  const oneSpoke = new THREE.ExtrudeGeometry(outline, {
+    depth: SPOKE_PROUD_HEIGHT, bevelEnabled: true, bevelThickness: SPOKE_ROUND_RADIUS,
+    bevelSize: SPOKE_ROUND_RADIUS, bevelSegments: 3, steps: 1,
+  })
+  oneSpoke.rotateX(-Math.PI / 2)
+  oneSpoke.translate(0, RIM_DISH_Y + 0.4, 0)
+  const spokes: THREE.BufferGeometry[] = []
+  for (let i = 0; i < SPOKE_COUNT; i += 1) {
+    const spoke = oneSpoke.clone()
+    spoke.rotateY(i * SPOKE_ANGLE_STEP)
+    spokes.push(spoke)
+  }
+
+  return mergeGeometries(forMerge([dish, ...spokes]))
 }
 
 /** The plain inboard barrel, hidden behind the tyre's inboard sidewall. */
@@ -389,7 +337,6 @@ function buildBarrelGeometry(): THREE.BufferGeometry {
 
 function buildWheel(
   materials: CarMaterials,
-  whiteLetter: THREE.MeshStandardMaterial,
   mirrored: boolean,
   center: readonly [number, number, number],
   id: string,
@@ -398,11 +345,10 @@ function buildWheel(
   group.name = id
 
   const tire = finishMesh(new THREE.Mesh(buildTireGeometry(), materials.rubber))
-  const letters = finishMesh(new THREE.Mesh(buildLetterGeometry(mirrored), whiteLetter))
   const chrome = finishMesh(new THREE.Mesh(buildChromeGeometry(), materials.chrome))
-  const dish = finishMesh(new THREE.Mesh(buildDishGeometry(), materials.blackTrim))
+  const spokes = finishMesh(new THREE.Mesh(buildSpokesGeometry(), materials.wheelSpoke))
   const barrel = finishMesh(new THREE.Mesh(buildBarrelGeometry(), materials.steelDark))
-  group.add(tire, letters, chrome, dish, barrel)
+  group.add(tire, chrome, spokes, barrel)
 
   orientForSide(group, mirrored)
   group.position.set(center[0], center[1], center[2])
@@ -513,35 +459,26 @@ function buildRearBrake(
 // -------------------------------------------------------------------------------------------
 
 export function buildWheels(materials: CarMaterials): PartBuild[] {
-  const whiteLetter = new THREE.MeshStandardMaterial({
-    color: WHITE_LETTER_COLOR,
-    roughness: WHITE_LETTER_ROUGHNESS,
-  })
-
   const wheelFrontLeft = buildWheel(
     materials,
-    whiteLetter,
     true,
     WHEEL_CENTERS.wheelFrontLeft,
     'wheelFrontLeft',
   )
   const wheelFrontRight = buildWheel(
     materials,
-    whiteLetter,
     false,
     WHEEL_CENTERS.wheelFrontRight,
     'wheelFrontRight',
   )
   const wheelRearLeft = buildWheel(
     materials,
-    whiteLetter,
     true,
     WHEEL_CENTERS.wheelRearLeft,
     'wheelRearLeft',
   )
   const wheelRearRight = buildWheel(
     materials,
-    whiteLetter,
     false,
     WHEEL_CENTERS.wheelRearRight,
     'wheelRearRight',

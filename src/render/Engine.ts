@@ -43,9 +43,25 @@ import { CATCH_FLARE_SECONDS, STARTER_CRANK_SECONDS } from '../engineSound.ts'
 
 const BACKGROUND_COLOR = 0x08080a
 const TONE_MAPPING_EXPOSURE = 1.0
-const ENVIRONMENT_INTENSITY = 0.9
+const ENVIRONMENT_INTENSITY = 0.75
 /** Sigma for the environment map's PMREM blur: a soft, wide light source, not a mirror. */
 const ENVIRONMENT_SIGMA = 0.02
+/**
+ * The studio dome the car's reflections come from: a photographer's sky rather than the dark
+ * showroom. Real car photographs read as real because the paint carries a bright, continuous
+ * overhead source that fades to a lighter band at the horizon and dark ground below, which is
+ * what draws the highlight line along the fender tops and the soft gradient down the doors.
+ * These are linear radiance values (above 1 is fine in the half-float PMREM) by elevation.
+ */
+const STUDIO_DOME_STOPS: readonly { elevation: number; color: readonly [number, number, number] }[] = [
+  { elevation: -1.0, color: [0.02, 0.02, 0.022] },
+  { elevation: -0.08, color: [0.05, 0.05, 0.055] },
+  { elevation: 0.0, color: [0.32, 0.33, 0.36] },
+  { elevation: 0.12, color: [0.55, 0.56, 0.6] },
+  { elevation: 0.35, color: [0.72, 0.74, 0.8] },
+  { elevation: 0.7, color: [1.15, 1.16, 1.2] },
+  { elevation: 1.0, color: [1.5, 1.5, 1.52] },
+]
 /** MSAA samples on the post-processing target; 0 would alias every edge of the car. */
 const COMPOSER_MSAA_SAMPLES = 4
 const BLOOM_STRENGTH = 0.045
@@ -225,6 +241,26 @@ const TAILLIGHT_DECAY = 2
  * Builds and runs the whole showroom on `canvas`, reporting hover/pick/camera/sound/ready events
  * back through `events`.
  */
+/** The studio dome as a big inward-facing sphere with `STUDIO_DOME_STOPS` painted by elevation. */
+function studioDomeGeometry(): THREE.BufferGeometry {
+  const geometry = new THREE.SphereGeometry(2000, 48, 32)
+  const positions = geometry.getAttribute('position')
+  const colors = new Float32Array(positions.count * 3)
+  const stops = STUDIO_DOME_STOPS
+  for (let i = 0; i < positions.count; i++) {
+    const elevation = positions.getY(i) / 2000
+    let k = 0
+    while (k < stops.length - 2 && elevation > stops[k + 1]!.elevation) k++
+    const a = stops[k]!
+    const b = stops[k + 1]!
+    const t = THREE.MathUtils.clamp((elevation - a.elevation) / (b.elevation - a.elevation), 0, 1)
+    const smooth = t * t * (3 - 2 * t)
+    for (let c = 0; c < 3; c++) colors[i * 3 + c] = a.color[c]! + (b.color[c]! - a.color[c]!) * smooth
+  }
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+  return geometry
+}
+
 export function createEngine(canvas: HTMLCanvasElement, events: EngineEvents): EngineApi {
   // --- Renderer / scene ------------------------------------------------------------------------
 
@@ -254,8 +290,8 @@ export function createEngine(canvas: HTMLCanvasElement, events: EngineEvents): E
   const pmremGenerator = new THREE.PMREMGenerator(renderer)
   const captureScene = new THREE.Scene()
   captureScene.background = new THREE.Color(BACKGROUND_COLOR)
-  const captureBackdropGeometry = new THREE.SphereGeometry(2000, 16, 12)
-  const captureBackdropMaterial = new THREE.MeshBasicMaterial({ color: BACKGROUND_COLOR, side: THREE.BackSide })
+  const captureBackdropGeometry = studioDomeGeometry()
+  const captureBackdropMaterial = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })
   const captureBackdrop = new THREE.Mesh(captureBackdropGeometry, captureBackdropMaterial)
   captureScene.add(captureBackdrop)
   captureScene.add(showroom.environmentGroup) // reparents out of showroom.group for the capture

@@ -25,12 +25,12 @@ export const TRACK_REAR = 58.5
 
 export const FRONT_AXLE_Z = WHEELBASE / 2
 export const REAR_AXLE_Z = -WHEELBASE / 2
-/** F60-15 tyres on 15 x 7 Magnum 500 wheels: about 26.2 in tall, 9 in wide. */
+/** 245/45R17 tyres on 17 x 8 five-spoke wheels: about 26.2 in tall, 9 in wide. */
 export const TIRE_DIAMETER = 26.2
 export const TIRE_WIDTH = 9
 export const TIRE_RADIUS = TIRE_DIAMETER / 2
-export const RIM_DIAMETER = 15
-export const RIM_WIDTH = 7
+export const RIM_DIAMETER = 17
+export const RIM_WIDTH = 8
 export const WHEEL_CENTER_Y = TIRE_RADIUS
 /** Centre of each tyre's width, measured from the centreline. */
 export const WHEEL_CENTER_X_FRONT = TRACK_FRONT / 2
@@ -45,7 +45,7 @@ export const WHEEL_CENTERS = {
 } as const
 
 /** Wheel arch openings in the body sides: centred on the axles, this radius, at this height. */
-export const WHEEL_ARCH_RADIUS = 16.2
+export const WHEEL_ARCH_RADIUS = 15
 export const WHEEL_ARCH_CENTER_Y = WHEEL_CENTER_Y + 0.5
 
 // -------------------------------------------------------------------------------------------

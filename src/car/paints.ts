@@ -1,7 +1,7 @@
 import type { PaintId, PaintInfo } from './types.ts'
 
 /**
- * The paint rack. The first entry is the default: the near-black charcoal the film car wears.
+ * The paint rack. The default is a readable gunmetal charcoal inspired by the film car.
  * The rest are genuine 1969 Ford colours with their paint codes.
  */
 export const PAINTS: readonly PaintInfo[] = [
@@ -9,7 +9,7 @@ export const PAINTS: readonly PaintInfo[] = [
     id: 'wickCharcoal',
     name: 'Charcoal',
     code: null,
-    hex: '#2a2c30',
+    hex: '#5a5f64',
     metallic: 0.7,
     note: 'A deep gunmetal charcoal, the colour of the film car. Not a factory 1969 colour.',
   },

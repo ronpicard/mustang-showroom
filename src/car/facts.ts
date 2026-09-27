@@ -25,7 +25,7 @@ export const FACT_SECTIONS: readonly FactSection[] = [
     title: 'The 1969 Mustang',
     paragraphs: [
       'For 1969 Ford gave the Mustang its first thorough restyle. The car grew almost four inches in length and an inch in width on the same 108-inch wheelbase, the hood stretched, the nose gained quad headlights, and the fastback became the SportsRoof, its roofline running unbroken to a kicked-up tail. It was the year of the Mach 1, the Boss 302 and the Boss 429, and the year the Mustang stopped being a secretary\'s car and became a muscle car.',
-      'Ford built 299,824 Mustangs for 1969, down from 317,404 the year before as the Camaro, Firebird, Javelin and Challenger crowded in. The car in this showroom is a Mach 1 SportsRoof in the style of the film car: the Boss 429 hood scoop, hood pins, Magnum 500 wheels, and a charcoal paint that was never on the colour chart.',
+      'Ford built 299,824 Mustangs for 1969, down from 317,404 the year before as the Camaro, Firebird, Javelin and Challenger crowded in. The car in this showroom is a Mach 1 SportsRoof in the style of the film car: the Boss 429 hood scoop, hood pins, 17 x 8 polished five-spoke wheels, and a charcoal paint that was never on the colour chart.',
     ],
     table: [
       { label: 'Wheelbase', value: '108 in' },
@@ -89,8 +89,8 @@ export const FACT_SECTIONS: readonly FactSection[] = [
     id: 'film',
     title: 'The film car',
     paragraphs: [
-      'In John Wick (2014) the retired hitman\'s car is a 1969 Mustang. The film calls it a Boss 429, and it wears the Boss 429 hood scoop and badges, but the cars built for filming were Mach 1s dressed to look the part; a real Boss 429 is far too valuable to jump. Its theft, along with the loss of his dog, is what brings Wick out of retirement, and the car\'s recovery opens the second film.',
-      'The look is what people remember: dark charcoal paint with no stripes, black-out grille and tail panel, and Magnum 500 wheels. This showroom starts in that colour; the paint rack has the genuine 1969 Ford colours beside it.',
+      'In John Wick (2014) the retired hitman\'s car is a 1969 Mustang. Although the dialogue calls it a Boss 429, the screen car is generally identified as a modified Mach 1. Its theft, along with the loss of his dog, is what brings Wick out of retirement, and the car\'s recovery opens the second film.',
+      'The look combines charcoal-grey paint with low-gloss black rally stripes, a black-out grille and tail panel, and five-spoke wheels. This showroom starts with a film-inspired gunmetal finish, black stripes, a compact scoop and spoilers; it is not a factory-correct Boss 429 restoration. The paint rack offers genuine 1969 Ford colours beside it.',
     ],
   },
   {

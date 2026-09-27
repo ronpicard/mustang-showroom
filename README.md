@@ -8,7 +8,8 @@ There is no game and no scoring: it is a car to look at and take apart.
 
 - Orbit, pan-free, and zoom around the car on its turntable, or jump to fixed views (front, rear three-quarter, side, top, engine bay, interior, wheel).
 - Change the paint between the film car's charcoal and seven genuine 1969 Ford colours.
-- Inspect glossy clearcoat paint, lightly tinted glass, textured rubber and cabin materials, and rounded street tires with raised sidewall lettering. Broad studio fill lights show the body contours without washing out the chrome.
+- Inspect glossy clearcoat paint, lightly tinted glass, textured rubber and cabin materials, and low-profile street tires on polished five-spoke wheels. Broad studio fill lights show the body contours without washing out the chrome.
+- Curved fender shoulders and rear quarters, close panel joints, recessed quad headlights and a fine metal grille give the body a more natural shape. Deep gunmetal charcoal, twin satin-black rally stripes, a compact black scoop and front/rear spoilers give it a John Wick–inspired finish. The stripes stay black across paint choices and move with their panels.
 - Open the hood, both doors and the trunk, individually or all at once.
 - Drag the explode slider to pull every panel, trim piece, wheel, chassis component and engine part apart along its own path, staggered so the outer panels move first.
 - Click any part of the car — inside or out, open or exploded — to select it, fly the camera to it, and read its name, group, description and specs in the side panel.
@@ -45,7 +46,7 @@ Keys are ignored while an input or select element has focus.
 
 ## The car
 
-The showroom models a 1969 Ford Mustang SportsRoof (fastback) from its published dimensions: the body panels, quad headlights, three-bar taillights, Magnum 500 wheels, the unibody floor and suspension underneath, a big-block V8 in the engine bay, and the dashboard, seats and console inside. Trim, materials and proportions follow the Mach 1 dressed with the Boss 429's hood scoop and hood pins, the look the car wears in John Wick — a real Boss 429 is far too valuable to film with. Some mechanical detail is simplified (single representative parts stand in for full assemblies such as the exhaust or the front suspension) so the whole car stays light enough to explode and orbit smoothly.
+The showroom models a 1969 Ford Mustang SportsRoof (fastback) from its published dimensions: the body panels, quad headlights, three-bar taillights, 17-inch five-spoke wheels, the unibody floor and suspension underneath, a big-block V8 in the engine bay, and the dashboard, seats and console inside. Its charcoal paint, black rally stripes, scoop, hood pins and spoilers are inspired by the John Wick film car rather than a factory-correct Boss 429 restoration. Some mechanical detail is simplified (single representative parts stand in for full assemblies such as the exhaust or the front suspension) so the whole car stays light enough to explode and orbit smoothly.
 
 ## Tech stack
 

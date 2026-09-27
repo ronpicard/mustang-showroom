@@ -10,6 +10,10 @@ All notable changes to Mustang Showroom are documented in this file, following t
 
 ### Changed
 
+- The car's reflections now come from a photographer's studio dome, bright overhead and fading to a soft horizon band, so the paint carries a highlight line along the fender tops and a gradient down the doors instead of mirroring a black room. The default charcoal is a lighter gunmetal and metallic paints reflect more, so the body reads in the same tones as the real film car.
+- Low-profile tyres on 17-inch polished five-spoke wheels in the Torq Thrust style replace the tall F60-15s and Magnum 500s, with a deep machined lip and gunmetal spokes, and the raised white sidewall letters are gone.
+- Fuller, smoothly curved body panels, tighter seams and slimmer window trim replace the slab-like sides. The nose wraps around its headlights, the lower valance rolls underneath, and a fine recessed grille carries a small horse emblem.
+- John Wick–inspired deep gunmetal paint, twin satin-black rally stripes, a compact black hood scoop and front/rear spoilers replace the plain grey finish. Softer fender shoulders and clearcoat reflections reduce the raised, wing-like look around the hood. Stripes follow their panels when opened or exploded.
 - More realistic surface finishes: deeper clearcoat paint, softer chrome reflections, lightly tinted glass, textured rubber, cast metal, upholstery and woodgrain. Broad studio lights keep the body readable without the previous glare.
 - Tires now have rounded sidewalls, shallower street tread, readable raised lettering and continuous sculpted wheel spokes. Wheel openings follow smooth curves instead of stepped mesh cut-outs, and the contact shadow follows the car's footprint.
 - The car is lit by its own three-spot rig (key, fill and rim) so it reads brightly from every angle while the showroom around it stays dark, and a soft contact shadow grounds it on the turntable.
@@ -19,6 +23,7 @@ All notable changes to Mustang Showroom are documented in this file, following t
 
 ### Fixed
 
+- Rear quarter windows now sit in real openings instead of over opaque bodywork.
 - The air-cleaner seal now lies flat, and the radiator sits below the closed hood. Wheelhouse liners face outward so assembled wheel openings no longer expose the mechanical parts behind them.
 - The display placard sits near the wall, keeping the showcase view clear on phones.
 - The floor no longer mirrors the car's chrome edges as flickering scribbles in front of the turntable; the car is left out of the floor's reflection pass, and the contact shadow sits clear of the platform.

@@ -284,10 +284,10 @@ const DRAFTS: readonly PartDraft[] = [
     name: 'Hood scoop',
     group: 'exterior',
     description:
-      'The Boss 429 wore the largest hood scoop Ford ever fitted to a Mustang: a wide, functional box feeding the air cleaner, mounted well forward on the hood. The film car copies it onto a Mach 1, whose own scoop was smaller and, unless the Shaker was ordered, only decorative.',
+      'This compact satin-black scoop follows the film-inspired styling of the showroom rather than reproducing a factory Boss 429 scoop. Its tapered shell and recessed mouth sit low over the air cleaner.',
     specs: [
-      { label: 'Style', value: 'Boss 429, functional' },
-      { label: 'Width', value: '19 in' },
+      { label: 'Style', value: 'Film-inspired, satin black' },
+      { label: 'Width', value: '17 in (model)' },
     ],
     explode: { direction: [0, 1, 0.2], distance: 48, order: 0.05 },
     focus: { direction: FROM_ABOVE_FRONT },
@@ -436,10 +436,10 @@ const DRAFTS: readonly PartDraft[] = [
     name: 'Front wheel, driver side',
     group: 'wheels',
     description:
-      'A 15 by 7 Magnum 500: a chrome five-spoke steel wheel with a black-painted centre, sold by Ford on the Boss 429 and popular on every Mustang since. Wrapped in an F60-15 Goodyear Polyglas GT, the widest tyre Ford fitted that year, with a raised white letter sidewall.',
+      'A 17 x 8 polished five-spoke wheel in the American Racing Torq Thrust style: a deep machined lip around a gunmetal dish, with a small polished centre cap. Wrapped in a low-profile 245/45R17 tyre with a plain black sidewall.',
     specs: [
-      { label: 'Wheel', value: 'Magnum 500, 15 × 7 in' },
-      { label: 'Tyre', value: 'F60-15 Polyglas GT' },
+      { label: 'Wheel', value: '17 x 8 polished five-spoke' },
+      { label: 'Tyre', value: '245/45R17' },
       { label: 'Diameter', value: '26 in' },
     ],
     explode: { direction: [-1, 0, 0], distance: 30, order: 0.4 },
@@ -450,10 +450,10 @@ const DRAFTS: readonly PartDraft[] = [
     name: 'Front wheel, passenger side',
     group: 'wheels',
     description:
-      'The passenger-side front wheel: a 15 by 7 Magnum 500 with an F60-15 tyre. The front wheels are steered through the tie rods and carry the disc brakes; the Mach 1 with a big-block got power front discs as standard.',
+      'The passenger-side front wheel: a 17 x 8 polished five-spoke wheel with a 245/45R17 tyre. The front wheels are steered through the tie rods and carry the disc brakes; the Mach 1 with a big-block got power front discs as standard.',
     specs: [
-      { label: 'Wheel', value: 'Magnum 500, 15 × 7 in' },
-      { label: 'Tyre', value: 'F60-15 Polyglas GT' },
+      { label: 'Wheel', value: '17 x 8 polished five-spoke' },
+      { label: 'Tyre', value: '245/45R17' },
     ],
     explode: { direction: [1, 0, 0], distance: 30, order: 0.4 },
     focus: { direction: [1, 0.15, 0.25], distanceFactor: 2.6 },
@@ -465,8 +465,8 @@ const DRAFTS: readonly PartDraft[] = [
     description:
       'The rear wheels are driven through the live axle and stop with drum brakes. On the Boss 429, the rear wheel arches were flared to clear the wider F60 tyres; the film car keeps the stock arches.',
     specs: [
-      { label: 'Wheel', value: 'Magnum 500, 15 × 7 in' },
-      { label: 'Tyre', value: 'F60-15 Polyglas GT' },
+      { label: 'Wheel', value: '17 x 8 polished five-spoke' },
+      { label: 'Tyre', value: '245/45R17' },
     ],
     explode: { direction: [-1, 0, 0], distance: 30, order: 0.4 },
     focus: { direction: [-1, 0.15, -0.25], distanceFactor: 2.6 },
@@ -476,10 +476,10 @@ const DRAFTS: readonly PartDraft[] = [
     name: 'Rear wheel, passenger side',
     group: 'wheels',
     description:
-      'The passenger-side rear wheel, driven and drum-braked like its twin. The 15-inch wheel leaves room to see the drum and the axle flange behind the spokes.',
+      'The passenger-side rear wheel, driven and drum-braked like its twin. The 17-inch wheel leaves room to see the drum and the axle flange behind the spokes.',
     specs: [
-      { label: 'Wheel', value: 'Magnum 500, 15 × 7 in' },
-      { label: 'Tyre', value: 'F60-15 Polyglas GT' },
+      { label: 'Wheel', value: '17 x 8 polished five-spoke' },
+      { label: 'Tyre', value: '245/45R17' },
     ],
     explode: { direction: [1, 0, 0], distance: 30, order: 0.4 },
     focus: { direction: [1, 0.15, -0.25], distanceFactor: 2.6 },

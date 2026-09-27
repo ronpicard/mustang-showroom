@@ -34,8 +34,6 @@ import {
   HOOD_REAR_Y,
   HOOD_REAR_Z,
   HOOD_SCOOP_FRONT_Z,
-  HOOD_SCOOP_HALF_WIDTH,
-  HOOD_SCOOP_HEIGHT,
   HOOD_SCOOP_REAR_Z,
   MIRROR_X,
   MIRROR_Y,
@@ -63,8 +61,8 @@ import {
  * clipped to the body panels built in `carBody.ts` (not read by this file).
  *
  * Chrome pieces get real detail rather than flat shiny boxes: rounded edges (`RoundedBoxGeometry`
- * or a bevelled `ExtrudeGeometry`), bezel rings, a fluted lens over the lights and a genuine
- * hexagonal honeycomb behind the grille surround.
+ * or a bevelled `ExtrudeGeometry`), bezel rings, a fluted lens over the lights and fine
+ * recessed metal mesh behind the grille surround.
  */
 
 // -------------------------------------------------------------------------------------------
@@ -72,13 +70,14 @@ import {
 // `car/dimensions.ts`; these are geometry choices local to how this file models each part.
 // -------------------------------------------------------------------------------------------
 
-/** Chrome ring around the grille opening, and how many honeycomb cells fill it (spec: ~12 x 4). */
-const GRILLE_SURROUND_WIDTH = 0.8
-const GRILLE_SURROUND_DEPTH = 2
-const GRILLE_HEX_COLS = 12
-const GRILLE_HEX_ROWS = 4
-const GRILLE_HEX_DEPTH = 1.6
-/** The running-horse emblem plate, offset to the driver side. */
+/** Thin chrome surround and the fine rectangular grille mesh. */
+const GRILLE_SURROUND_WIDTH = 0.35
+const GRILLE_SURROUND_DEPTH = 0.7
+const GRILLE_MESH_COLS = 48
+const GRILLE_MESH_ROWS = 8
+const GRILLE_RIB_WIDTH = 0.1
+const GRILLE_RIB_DEPTH = 0.14
+/** The running-horse emblem, offset to the driver side. */
 const EMBLEM_WIDTH = 4
 const EMBLEM_HEIGHT = 2
 const EMBLEM_X = -12
@@ -108,9 +107,12 @@ const LICENSE_PLATE_WIDTH = 12
 const LICENSE_PLATE_HEIGHT = 6
 const LICENSE_PLATE_FRAME_WIDTH = 0.6
 
-/** Hood scoop shell wall thickness and how far the dark interior is inset from the mouth. */
-const HOOD_SCOOP_WALL = 1
-const HOOD_SCOOP_OPENING_INSET = 0.8
+/** Compact hood scoop profile and mouth details. */
+const HOOD_SCOOP_HALF_WIDTH = 8.5
+const HOOD_SCOOP_TOP_HEIGHT = 3
+const HOOD_SCOOP_REAR_HEIGHT = 0.25
+const HOOD_SCOOP_MOUTH_INSET = 0.55
+const HOOD_SCOOP_LIP_RADIUS = 0.16
 
 /** Hood pin hardware: scuff plate, post, hairpin clip and its tethered cable. */
 const HOOD_PIN_PLATE_DIAMETER = 2.5
@@ -285,35 +287,45 @@ function ringsToGeometry(positions: number[], ringSize: number, steps: number): 
   return geometry
 }
 
-/** A honeycomb of open hexagonal cells (hollow tubes) filling a rectangle, with round cut-outs. */
-function buildHoneycomb(
+/** Fine rectangular ribs, split where they meet the inner headlight openings. */
+function buildGrilleMesh(
   width: number,
   height: number,
-  cellRadius: number,
-  depth: number,
   holes: readonly { x: number; y: number; radius: number }[],
 ): THREE.BufferGeometry {
-  const colSpacing = cellRadius * 1.5
-  const rowSpacing = cellRadius * Math.sqrt(3)
-  const cols = Math.ceil(width / colSpacing) + 2
-  const rows = Math.ceil(height / rowSpacing) + 2
-  const cells: THREE.BufferGeometry[] = []
-  for (let row = 0; row < rows; row++) {
-    const y = -height / 2 + row * rowSpacing
-    if (y > height / 2) continue
-    const xOffset = row % 2 === 0 ? 0 : colSpacing / 2
-    for (let col = 0; col < cols; col++) {
-      const x = -width / 2 + col * colSpacing + xOffset
-      if (x < -width / 2 || x > width / 2) continue
-      if (holes.some((hole) => Math.hypot(x - hole.x, y - hole.y) < hole.radius)) continue
-      const cell = new THREE.CylinderGeometry(cellRadius * 0.95, cellRadius * 0.95, depth, 6, 1, true)
-      cell.rotateX(Math.PI / 2)
-      cell.rotateZ(Math.PI / 6)
-      cell.translate(x, y, 0)
-      cells.push(cell)
+  const ribs: THREE.BufferGeometry[] = []
+  const addRib = (position: number, min: number, max: number, vertical: boolean): void => {
+    const blocked = holes.flatMap((hole) => {
+      const offset = position - (vertical ? hole.x : hole.y)
+      const radius = hole.radius + GRILLE_RIB_WIDTH / 2
+      if (Math.abs(offset) >= radius) return []
+      const halfSpan = Math.sqrt(radius * radius - offset * offset)
+      const center = vertical ? hole.y : hole.x
+      return [{ start: center - halfSpan, end: center + halfSpan }]
+    }).sort((a, b) => a.start - b.start)
+    let start = min
+    for (const opening of [...blocked, { start: max, end: max }]) {
+      const end = Math.min(opening.start, max)
+      if (end - start > 0.01) {
+        const length = end - start
+        const rib = new THREE.BoxGeometry(
+          vertical ? GRILLE_RIB_WIDTH : length,
+          vertical ? length : GRILLE_RIB_WIDTH,
+          GRILLE_RIB_DEPTH,
+        )
+        rib.translate(vertical ? position : (start + end) / 2, vertical ? (start + end) / 2 : position, 0)
+        ribs.push(rib)
+      }
+      start = Math.max(start, opening.end)
     }
   }
-  return mergeGeometries(cells, false)
+  for (let col = 0; col < GRILLE_MESH_COLS; col++) {
+    addRib(-width / 2 + (col + 0.5) * width / GRILLE_MESH_COLS, -height / 2, height / 2, true)
+  }
+  for (let row = 0; row < GRILLE_MESH_ROWS; row++) {
+    addRib(-height / 2 + (row + 0.5) * height / GRILLE_MESH_ROWS, -width / 2, width / 2, false)
+  }
+  return mergeGeometries(ribs, false)
 }
 
 /** A round, slightly domed lens with fine ridges radiating from its centre (headlights). */
@@ -375,23 +387,70 @@ function buildGrille(materials: CarMaterials): THREE.Group {
   frame.position.set(0, centerY, GRILLE_Z)
   group.add(frame)
 
-  const cellRadiusFromWidth = innerWidth / (GRILLE_HEX_COLS * 1.5)
-  const cellRadiusFromHeight = innerHeight / (GRILLE_HEX_ROWS * Math.sqrt(3))
-  const cellRadius = (cellRadiusFromWidth + cellRadiusFromHeight) / 2
   const holes = [
     { x: -HEADLIGHT_INNER_X, y: HEADLIGHT_Y - centerY, radius: HEADLIGHT_DIAMETER / 2 + 0.5 },
     { x: HEADLIGHT_INNER_X, y: HEADLIGHT_Y - centerY, radius: HEADLIGHT_DIAMETER / 2 + 0.5 },
   ]
-  const honeycomb = finish(new THREE.Mesh(buildHoneycomb(innerWidth - 0.5, innerHeight - 0.5, cellRadius, GRILLE_HEX_DEPTH, holes), materials.blackTrim))
-  honeycomb.position.set(0, centerY, GRILLE_Z - GRILLE_SURROUND_DEPTH / 2 - GRILLE_HEX_DEPTH / 2 - 0.3)
-  group.add(honeycomb)
+  const mesh = finish(new THREE.Mesh(buildGrilleMesh(innerWidth - 0.2, innerHeight - 0.2, holes), materials.blackTrim))
+  mesh.position.set(0, centerY, GRILLE_Z - 0.18)
+  group.add(mesh)
 
-  const backing = finish(new THREE.Mesh(new THREE.PlaneGeometry(innerWidth, innerHeight), materials.blackTrim))
-  backing.position.set(0, centerY, GRILLE_Z - GRILLE_SURROUND_DEPTH / 2 - GRILLE_HEX_DEPTH - 1)
+  const backingShape = new THREE.Shape()
+  backingShape.moveTo(-innerWidth / 2, -innerHeight / 2)
+  backingShape.lineTo(innerWidth / 2, -innerHeight / 2)
+  backingShape.lineTo(innerWidth / 2, innerHeight / 2)
+  backingShape.lineTo(-innerWidth / 2, innerHeight / 2)
+  backingShape.closePath()
+  for (const hole of holes) {
+    const opening = new THREE.Path()
+    opening.absarc(hole.x, hole.y, hole.radius, 0, Math.PI * 2, true)
+    backingShape.holes.push(opening)
+  }
+  const backing = finish(new THREE.Mesh(new THREE.ShapeGeometry(backingShape), materials.blackTrim))
+  backing.position.set(0, centerY, GRILLE_Z - 0.65)
   group.add(backing)
 
-  const emblem = finish(new THREE.Mesh(new RoundedBoxGeometry(EMBLEM_WIDTH, EMBLEM_HEIGHT, 0.3, 2, 0.15), materials.chrome))
-  emblem.position.set(EMBLEM_X, EMBLEM_Y, GRILLE_Z + GRILLE_SURROUND_DEPTH / 2 + 0.2)
+  const inset = finish(new THREE.Mesh(new RoundedBoxGeometry(EMBLEM_WIDTH, EMBLEM_HEIGHT, 0.12, 2, 0.08), materials.blackTrim))
+  inset.position.set(EMBLEM_X, EMBLEM_Y, GRILLE_Z + GRILLE_SURROUND_DEPTH / 2 + 0.2)
+  group.add(inset)
+
+  const horse = new THREE.Shape()
+  horse.moveTo(-1.15, 0.3)
+  horse.lineTo(-1.75, 0.65)
+  horse.lineTo(-1.5, 0.12)
+  horse.lineTo(-1.25, -0.08)
+  horse.lineTo(-1.02, -0.18)
+  horse.lineTo(-0.94, -0.68)
+  horse.lineTo(-0.72, -0.68)
+  horse.lineTo(-0.64, -0.14)
+  horse.lineTo(-0.12, -0.2)
+  horse.lineTo(0.3, -0.16)
+  horse.lineTo(0.42, -0.68)
+  horse.lineTo(0.64, -0.68)
+  horse.lineTo(0.62, -0.1)
+  horse.lineTo(0.92, 0.02)
+  horse.lineTo(1.18, -0.18)
+  horse.lineTo(1.35, -0.12)
+  horse.lineTo(1.18, 0.12)
+  horse.lineTo(0.92, 0.28)
+  horse.lineTo(0.8, 0.62)
+  horse.lineTo(1.08, 0.72)
+  horse.lineTo(1.32, 0.56)
+  horse.lineTo(1.43, 0.65)
+  horse.lineTo(1.12, 0.86)
+  horse.lineTo(0.72, 0.76)
+  horse.lineTo(0.5, 0.45)
+  horse.lineTo(-0.18, 0.4)
+  horse.lineTo(-0.72, 0.44)
+  horse.closePath()
+  const emblem = finish(new THREE.Mesh(new THREE.ExtrudeGeometry(horse, {
+    depth: 0.08,
+    bevelEnabled: true,
+    bevelThickness: 0.025,
+    bevelSize: 0.025,
+    bevelSegments: 2,
+  }), materials.chrome))
+  emblem.position.set(EMBLEM_X, EMBLEM_Y, inset.position.z + 0.08)
   group.add(emblem)
 
   return group
@@ -572,30 +631,37 @@ function buildRearBumper(materials: CarMaterials): THREE.Group {
 
 function buildHoodScoop(materials: CarMaterials): THREE.Group {
   const group = new THREE.Group()
-  const rearBase = hoodSurfaceY(HOOD_SCOOP_REAR_Z) - 0.5
-  const frontBase = hoodSurfaceY(HOOD_SCOOP_FRONT_Z) - 0.5
-  const z0 = HOOD_SCOOP_REAR_Z
-  const z1 = HOOD_SCOOP_FRONT_Z
-  const midA = 0.4
-  const midB = 0.75
-  const baseAtA = THREE.MathUtils.lerp(rearBase, frontBase, midA)
-  const baseAtB = THREE.MathUtils.lerp(rearBase, frontBase, midB)
+  const frontZ = HOOD_SCOOP_FRONT_Z - 10
+  const stationCount = 16
+  const stations = Array.from({ length: stationCount + 1 }, (_, index) => {
+    const t = index / stationCount
+    const eased = t * t * (3 - 2 * t)
+    const z = THREE.MathUtils.lerp(HOOD_SCOOP_REAR_Z, frontZ, t)
+    const hoodY = hoodSurfaceY(z)
+    const halfWidth = HOOD_SCOOP_HALF_WIDTH * (0.6 + 0.4 * eased)
+    const height = THREE.MathUtils.lerp(HOOD_SCOOP_REAR_HEIGHT, HOOD_SCOOP_TOP_HEIGHT, eased)
+    return { z, ring: roundedRectRing(halfWidth, hoodY - 0.2, hoodY + height, 1.1 * eased + 0.2) }
+  })
 
-  const stations = [
-    { z: z0, ring: roundedRectRing(HOOD_SCOOP_HALF_WIDTH * 0.55, rearBase, rearBase + 0.3, 0.3) },
-    { z: THREE.MathUtils.lerp(z0, z1, midA), ring: roundedRectRing(HOOD_SCOOP_HALF_WIDTH * 0.85, baseAtA, baseAtA + HOOD_SCOOP_HEIGHT * 0.55, 1) },
-    { z: THREE.MathUtils.lerp(z0, z1, midB), ring: roundedRectRing(HOOD_SCOOP_HALF_WIDTH * 0.97, baseAtB, baseAtB + HOOD_SCOOP_HEIGHT * 0.88, 1.2) },
-    { z: z1, ring: roundedRectRing(HOOD_SCOOP_HALF_WIDTH, frontBase, frontBase + HOOD_SCOOP_HEIGHT, 1.4) },
-  ]
-
-  const shell = finish(new THREE.Mesh(loftStations(stations), materials.paint))
+  const shell = finish(new THREE.Mesh(loftStations(stations), materials.satinBlack))
   group.add(shell)
 
-  const openingHeight = HOOD_SCOOP_HEIGHT - HOOD_SCOOP_OPENING_INSET
-  const openingWidth = HOOD_SCOOP_HALF_WIDTH * 2 - HOOD_SCOOP_OPENING_INSET * 2
-  const interior = finish(new THREE.Mesh(new THREE.PlaneGeometry(openingWidth, openingHeight), materials.satinBlack))
-  interior.position.set(0, frontBase + openingHeight / 2 + HOOD_SCOOP_OPENING_INSET / 2, z1 - HOOD_SCOOP_WALL)
+  const frontHoodY = hoodSurfaceY(frontZ)
+  const mouthBottom = frontHoodY + HOOD_SCOOP_MOUTH_INSET * 0.5
+  const mouthTop = frontHoodY + HOOD_SCOOP_TOP_HEIGHT - HOOD_SCOOP_MOUTH_INSET * 0.5
+  const mouth = new THREE.Shape()
+  roundedRectOutline(mouth, (HOOD_SCOOP_HALF_WIDTH - HOOD_SCOOP_MOUTH_INSET) * 2, mouthTop - mouthBottom, 1)
+  const interior = finish(new THREE.Mesh(new THREE.ShapeGeometry(mouth), materials.blackTrim))
+  interior.position.set(0, (mouthBottom + mouthTop) / 2, frontZ - 0.25)
   group.add(interior)
+
+  const frontRing = stations[stationCount].ring
+  const lipPath = new THREE.CatmullRomCurve3(
+    frontRing.map((point) => new THREE.Vector3(point.x, point.y, frontZ + 0.02)),
+    true,
+  )
+  const lip = finish(new THREE.Mesh(new THREE.TubeGeometry(lipPath, 80, HOOD_SCOOP_LIP_RADIUS, 6, true), materials.satinBlack))
+  group.add(lip)
 
   return group
 }

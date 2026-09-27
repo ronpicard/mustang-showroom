@@ -82,17 +82,17 @@ type Side = 1 | -1
 // -------------------------------------------------------------------------------------------
 
 /** Every panel's outline is inset this far from the true seam, so a dark gap line shows. */
-const PANEL_GAP = 0.25
+const PANEL_GAP = 0.08
 /** The inward-turned return lip at an open panel edge, so it reads as folded steel, not paper. */
 const FLANGE_DEPTH = 0.5
 /** Hood, trunk and roof inner skins sit this far below their outer skin. */
 const INNER_SKIN_DROP = 0.7
 /** Width of the chrome moulding strip around each glass pane. */
-const MOULDING_WIDTH = 0.6
+const MOULDING_WIDTH = 0.32
 /** Width of the chrome drip rail along the roof edge. */
 const DRIP_RAIL_WIDTH = 0.5
 /** Radius of the rolled lip around each wheel arch opening. */
-const ARCH_LIP_TUBE_RADIUS = 0.6
+const ARCH_LIP_TUBE_RADIUS = 0.32
 /** Turn-signal lamps in the front valance: lens proud of the panel (which curves away by up to 0.4 in
  * across the lamp), backing recessed behind it. */
 /** The cut-out is masked per grid cell, so the bezel is wide enough to hide its stepped edge. */
@@ -279,6 +279,26 @@ function topRows(zFrom: number, zTo: number, zSeg: number, xSeg: number, insetX:
   return rows
 }
 
+/** Low-gloss rally bands follow the actual panel skin, including its crown and hinge motion. */
+function rallyStripes(rows: readonly (readonly THREE.Vector3[])[], materials: CarMaterials): THREE.Group {
+  const group = new THREE.Group()
+  group.name = 'rallyStripes'
+  for (const side of [-1, 1]) {
+    const stripeRows = rows.map((row) => Array.from({ length: 13 }, (_, i) => {
+      const x = side < 0 ? -11 + 9 * i / 12 : 2 + 9 * i / 12
+      const index = row.findIndex((p, j) => j < row.length - 1 && p.x <= x && row[j + 1].x >= x)
+      const a = row[index]
+      const b = row[index + 1]
+      const y = THREE.MathUtils.lerp(a.y, b.y, (x - a.x) / (b.x - a.x))
+      return new THREE.Vector3(x, y + 0.06, a.z)
+    }))
+    const stripe = mesh(loft(stripeRows), materials.satinBlack)
+    stripe.castShadow = false
+    group.add(stripe)
+  }
+  return group
+}
+
 function insideCircleZY(p: THREE.Vector3, c: { z: number; y: number; r: number }): boolean {
   const a = p.z - c.z
   const b = p.y - c.y
@@ -365,6 +385,12 @@ function archLipAndWheelhouse(side: Side, axleZ: number): { lipGeom: THREE.Buffe
   lip.rotateY(Math.PI / 2)
   lip.rotateX(Math.PI / 2 - halfAngle)
   lip.translate(panelX * side, WHEEL_ARCH_CENTER_Y, axleZ)
+  const positions = lip.getAttribute('position')
+  for (let i = 0; i < positions.count; i++) {
+    const skinX = sectionHalfWidth(stationAt(positions.getZ(i)), positions.getY(i), false)
+    positions.setX(i, positions.getX(i) + (skinX - panelX) * side)
+  }
+  lip.computeVertexNormals()
 
   return { lipGeom: lip, wheelhouseGeom: wheelhouseGeometry(side, axleZ, panelX) }
 }
@@ -374,9 +400,28 @@ function archLipAndWheelhouse(side: Side, axleZ: number): { lipGeom: THREE.Buffe
 function headlightBucket(materials: CarMaterials, side: Side): THREE.Mesh {
   const r = HEADLIGHT_DIAMETER / 2 + 0.4
   const geo = new THREE.CylinderGeometry(r, r, 2, 20, 1, true)
-  geo.rotateZ(Math.PI / 2)
+  geo.rotateX(Math.PI / 2)
   geo.translate(HEADLIGHT_OUTER_X * side, HEADLIGHT_Y, HEADLIGHT_OUTER_Z)
   return mesh(geo, materials.chrome)
+}
+
+/** Painted end cap wraps each recessed outer lamp instead of leaving an open fender end. */
+function fenderNoseGeometry(side: Side): THREE.BufferGeometry {
+  const station = stationAt(NOSE_Z)
+  const rows: THREE.Vector3[][] = []
+  for (let i = 0; i <= 28; i++) {
+    const t = i / 28
+    const y = GRILLE_BOTTOM_Y + (station.belt[1] - GRILLE_BOTTOM_Y) * t
+    const outer = sectionHalfWidth(station, y, false)
+    rows.push(Array.from({ length: 29 }, (_, j) => {
+      const u = j / 28
+      const x = THREE.MathUtils.lerp(station.crease[0], outer, u)
+      return new THREE.Vector3(x * side, y, NOSE_Z - 0.45 - 1.1 * Math.sin(Math.PI * u) * Math.sin(Math.PI * t))
+    }))
+  }
+  return gridGeometry(rows, side === 1, (p) => insideCircleXY(p, {
+    x: HEADLIGHT_OUTER_X * side, y: HEADLIGHT_Y, r: HEADLIGHT_DIAMETER / 2 + 0.3,
+  }))
 }
 
 // -------------------------------------------------------------------------------------------
@@ -403,7 +448,7 @@ function buildHood(materials: CarMaterials): PartBuild {
   const innerMesh = mesh(mergeGeometries([loft(innerRows, true), ...ribs]), materials.satinBlack)
 
   const g = new THREE.Group()
-  g.add(outerMesh, innerMesh)
+  g.add(outerMesh, innerMesh, rallyStripes(outerRows, materials))
   g.name = 'hood'
   tagPart(g, 'hood')
   return { id: 'hood', objects: [g] }
@@ -452,7 +497,28 @@ function buildTrunkLid(materials: CarMaterials): PartBuild {
   const innerMesh = mesh(mergeGeometries([loft(innerRows, true), ...ribs]), materials.satinBlack)
 
   const g = new THREE.Group()
-  g.add(outerMesh, innerMesh)
+  g.add(outerMesh, innerMesh, rallyStripes(outerRows, materials))
+  // Film-inspired rear wing: mounted to the lid so it opens and explodes with that panel.
+  const wing = new THREE.Group()
+  wing.name = 'rearSpoiler'
+  for (const x of [-17, 17]) {
+    const mount = mesh(new THREE.BoxGeometry(1.2, 3.4, 3.2), materials.satinBlack)
+    mount.position.set(x, DECK_Y + 1.4, -83)
+    wing.add(mount)
+  }
+  const wingRows = Array.from({ length: 9 }, (_, i) => {
+    const z = -79 - i
+    const t = i / 8
+    return Array.from({ length: 33 }, (_, j) => {
+      const u = j / 16 - 1
+      return new THREE.Vector3(30 * u, DECK_Y + 3.3 + 0.4 * Math.sin(Math.PI * t) - 0.25 * u * u, z)
+    })
+  })
+  const wingSkin = loft(wingRows)
+  wing.add(mesh(mergeGeometries([wingSkin, loft(wingRows.map((r) => dropped(r, 'y', 0.35)), true),
+    loft([wingRows[0], dropped(wingRows[0], 'y', 0.35)]),
+    loft([wingRows[8], dropped(wingRows[8], 'y', 0.35)])]), materials.satinBlack))
+  g.add(wing)
   g.name = 'trunkLid'
   tagPart(g, 'trunkLid')
   return { id: 'trunkLid', objects: [g] }
@@ -471,8 +537,8 @@ function aPillar(materials: CarMaterials, side: Side): THREE.Mesh {
 
 /** Fills from the quarter's belt line up to the roof edge, framing the rear glass. */
 function sailPanelGeometry(side: Side): THREE.BufferGeometry {
-  const ZSEG = 14
-  const YSEG = 5
+  const ZSEG = 28
+  const YSEG = 14
   const zFrom = DOOR_REAR_Z
   const zTo = REAR_GLASS_BASE_Z
   const rows: THREE.Vector3[][] = []
@@ -483,11 +549,16 @@ function sailPanelGeometry(side: Side): THREE.BufferGeometry {
     const row: THREE.Vector3[] = []
     for (let j = 0; j <= YSEG; j++) {
       const t = j / YSEG
-      row.push(new THREE.Vector3((s.belt[0] + (gh.top[0] - s.belt[0]) * t) * side, s.belt[1] + (gh.top[1] - s.belt[1]) * t, z))
+      row.push(new THREE.Vector3((s.belt[0] + (gh.top[0] - s.belt[0]) * t + 0.9 * Math.sin(Math.PI * t)) * side, s.belt[1] + (gh.top[1] - s.belt[1]) * t, z))
     }
     rows.push(row)
   }
-  return loft(rows, side === 1)
+  return gridGeometry(rows, side === 1, (p) => {
+    const s = stationAt(p.z)
+    const gh = greenhouseAt(p.z)
+    return p.z < QUARTER_GLASS_FRONT_Z && p.z > QUARTER_GLASS_REAR_Z
+      && p.y > s.belt[1] + 0.75 && p.y < Math.min(QUARTER_GLASS_TOP_Y, gh.top[1] - 0.4) - 0.15
+  })
 }
 
 function dripRailGeometry(rows: readonly (readonly THREE.Vector3[])[]): THREE.BufferGeometry {
@@ -515,7 +586,7 @@ function buildRoof(materials: CarMaterials): PartBuild {
   const headlinerMesh = mesh(loft(innerRows, true), materials.interiorBlack)
 
   const g = new THREE.Group()
-  g.add(outerMesh, aPillar(materials, 1), aPillar(materials, -1), dripRailMesh, headlinerMesh)
+  g.add(outerMesh, aPillar(materials, 1), aPillar(materials, -1), dripRailMesh, headlinerMesh, rallyStripes(rows, materials))
   g.name = 'roof'
   tagPart(g, 'roof')
   return { id: 'roof', objects: [g] }
@@ -535,14 +606,23 @@ function buildFenderSide(materials: CarMaterials, side: Side, id: PartId): PartB
 
   const sideRows = buildProfileRows(zFrom, zTo, ZSEG, YSEG, side, (s) => s.rockerTop[1], (s) => s.belt[1], false)
   const sideGeom = gridGeometry(sideRows, side === 1, (p) => insideCircleZY(p, arch))
-  const shoulderRows = buildProfileRows(zFrom, zTo, ZSEG, SHOULDER_YSEG, side, (s) => s.belt[1], (s) => s.crease[1], true)
+  const shoulderRows = sideRows.map((row) => {
+    const z = row[0].z
+    const s = stationAt(z)
+    return Array.from({ length: SHOULDER_YSEG + 1 }, (_, j) => {
+      const t = j / SHOULDER_YSEG
+      const swell = 0.3 * Math.sin(Math.PI * t) * Math.sin(Math.PI * (zFrom - z) / (zFrom - zTo))
+      return new THREE.Vector3(THREE.MathUtils.lerp(s.belt[0], s.crease[0], t) * side,
+        THREE.MathUtils.lerp(s.belt[1], s.crease[1], t) + swell, z)
+    })
+  })
   const shoulderGeom = gridGeometry(shoulderRows, side === 1)
 
   const rearEdge = sideRows[sideRows.length - 1].concat(shoulderRows[shoulderRows.length - 1].slice(1))
   const rearFlange = loft([rearEdge, dropped(rearEdge, 'z', side * 0 + FLANGE_DEPTH)])
 
   const { lipGeom, wheelhouseGeom } = archLipAndWheelhouse(side, FRONT_AXLE_Z)
-  const paintGeom = mergeGeometries([sideGeom, shoulderGeom, rearFlange, lipGeom])
+  const paintGeom = mergeGeometries([sideGeom, shoulderGeom, rearFlange, lipGeom, fenderNoseGeometry(side)])
 
   const g = new THREE.Group()
   g.add(mesh(paintGeom, materials.paint), mesh(wheelhouseGeom, materials.underbody), headlightBucket(materials, side))
@@ -661,16 +741,23 @@ function buildRearPanel(materials: CarMaterials): PartBuild {
 function buildFrontValance(materials: CarMaterials): PartBuild {
   const XSEG = 24
   const YSEG = 10
-  const yLow = VALANCE_BOTTOM_Y
+  const yLow = VALANCE_BOTTOM_Y + 2.5
   const yHigh = GRILLE_BOTTOM_Y - PANEL_GAP
   const halfWidth = GRILLE_HALF_WIDTH + 8
+  const skinZ = (x: number, y: number) => {
+    const lower = THREE.MathUtils.clamp((yHigh - y) / (yHigh - yLow), 0, 1)
+    return NOSE_Z + PANEL_GAP - 2.4 * (x / halfWidth) ** 2 - 4 * lower ** 2
+  }
   const rows: THREE.Vector3[][] = []
   for (let i = 0; i <= YSEG; i++) {
     const y = yLow + (yHigh - yLow) * (i / YSEG)
     const row: THREE.Vector3[] = []
     for (let j = 0; j <= XSEG; j++) {
       const u = (j / XSEG) * 2 - 1
-      row.push(new THREE.Vector3(halfWidth * u, y, NOSE_Z + PANEL_GAP - 2.4 * u * u))
+      const lower = 1 - i / YSEG
+      const x = (halfWidth - 2 * lower ** 2) * u
+      const roundedY = y + 2 * u * u * lower ** 2
+      row.push(new THREE.Vector3(x, roundedY, skinZ(x, roundedY)))
     }
     rows.push(row)
   }
@@ -684,8 +771,7 @@ function buildFrontValance(materials: CarMaterials): PartBuild {
   )
   // The turn signals that fill the cut-outs: a chrome bezel, an amber lens and a satin-black
   // backing behind it, so the lens reads as a lamp instead of a window onto the suspension.
-  const uSignal = TURN_SIGNAL_X / halfWidth
-  const zSignal = NOSE_Z + PANEL_GAP - 2.4 * uSignal * uSignal
+  const zSignal = skinZ(TURN_SIGNAL_X, TURN_SIGNAL_Y)
   const signalParts: THREE.BufferGeometry[] = []
   const backingParts: THREE.BufferGeometry[] = []
   const bezelParts: THREE.BufferGeometry[] = []
@@ -704,6 +790,17 @@ function buildFrontValance(materials: CarMaterials): PartBuild {
     mesh(mergeGeometries(bezelParts), materials.chrome),
     mesh(mergeGeometries(signalParts), materials.amberLens),
   )
+  const chinRows = Array.from({ length: 7 }, (_, i) => {
+    const t = i / 6
+    return Array.from({ length: 33 }, (_, j) => {
+      const u = j / 16 - 1
+      return new THREE.Vector3((32 + 1.8 * t) * u, 12 - 2.8 * t + 1.2 * u * u,
+        NOSE_Z - 6 + 8 * t - 3 * u * u)
+    })
+  })
+  const chin = mesh(loft(chinRows), materials.satinBlack)
+  chin.name = 'chinSpoiler'
+  g.add(chin)
   g.name = 'frontValance'
   tagPart(g, 'frontValance')
   return { id: 'frontValance', objects: [g] }
@@ -830,14 +927,14 @@ function buildQuarterGlassSide(materials: CarMaterials, side: Side): THREE.Group
     const z = zFrom + (zTo - zFrom) * (i / ROWSEG)
     const s = stationAt(z)
     const gh = greenhouseAt(z)
-    const yLow = s.belt[1]
-    const yHigh = Math.min(QUARTER_GLASS_TOP_Y, gh.top[1])
-    // Same tumblehome plane as the sail panel it sits in, held a touch proud of it.
+    const yLow = s.belt[1] + 0.6
+    const yHigh = Math.min(QUARTER_GLASS_TOP_Y, gh.top[1] - 0.4)
+    // Follow the sail's crown, just proud of the open window aperture.
     const row: THREE.Vector3[] = []
     for (let j = 0; j <= COLSEG; j++) {
       const y = yLow + (yHigh - yLow) * (j / COLSEG)
       const tFull = (y - s.belt[1]) / (gh.top[1] - s.belt[1])
-      const x = s.belt[0] + (gh.top[0] - s.belt[0]) * tFull + 0.5
+      const x = s.belt[0] + (gh.top[0] - s.belt[0]) * tFull + 0.9 * Math.sin(Math.PI * tFull) + 0.12
       row.push(new THREE.Vector3(x * side, y, z))
     }
     rows.push(row)

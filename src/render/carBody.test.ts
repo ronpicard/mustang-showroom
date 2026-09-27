@@ -8,6 +8,64 @@ import { stationAt } from './bodyProfile.ts'
 
 const BODY_SIDE_PARTS: PartId[] = ['fenderLeft', 'fenderRight', 'quarterLeft', 'quarterRight']
 
+test('black rally stripes stay attached to the hood, roof and trunk panels', () => {
+  const assembly = createCarAssembly()
+  try {
+    for (const id of ['hood', 'roof', 'trunkLid'] as const) {
+      const panel = assembly.partObjects(id)[0]!
+      const stripes = panel.getObjectByName('rallyStripes')!
+      assert.ok(stripes, `${id} needs its rally stripes`)
+      assert.equal(stripes.children.length, 2)
+      for (const child of stripes.children) {
+        const stripe = child as THREE.Mesh
+        assert.equal(stripe.material, assembly.materials.satinBlack)
+        assert.equal(stripe.userData.partId, id)
+        const box = new THREE.Box3().setFromObject(stripe)
+        assert.ok(Math.abs(box.getSize(new THREE.Vector3()).x - 9) < 0.01)
+      }
+    }
+    assembly.group.updateMatrixWorld(true)
+    const stripe = assembly.partObjects('hood')[0]!.getObjectByName('rallyStripes')!.children[0]
+    const before = stripe.matrixWorld.clone()
+    assembly.setOpenness('hood', 1)
+    assembly.group.updateMatrixWorld(true)
+    assert.ok(!stripe.matrixWorld.equals(before), 'hood stripes must move with the opening hood')
+    assert.equal(stripe.userData.partId, 'hood')
+  } finally {
+    assembly.dispose()
+  }
+})
+
+test('film-inspired scoop and spoilers remain compact and part of the inspection model', () => {
+  const assembly = createCarAssembly()
+  try {
+    assembly.group.updateMatrixWorld(true)
+    const scoop = assembly.partObjects('hoodScoop')[0]!
+    const size = new THREE.Box3().setFromObject(scoop).getSize(new THREE.Vector3())
+    assert.ok(size.x < 18 && size.z < 27 && size.y < 5, `oversized scoop: ${size.toArray()}`)
+    assert.equal((scoop.children[0] as THREE.Mesh).material, assembly.materials.satinBlack)
+    for (const [id, name] of [['frontValance', 'chinSpoiler'], ['trunkLid', 'rearSpoiler']] as const) {
+      const spoiler = assembly.partObjects(id)[0]!.getObjectByName(name)!
+      assert.ok(spoiler)
+      assert.equal(spoiler.userData.partId, id)
+      assert.ok(new THREE.Box3().setFromObject(spoiler).min.y > 0)
+    }
+  } finally {
+    assembly.dispose()
+  }
+})
+
+test('the rear quarter windows are not backed by opaque roof bodywork', () => {
+  const assembly = createCarAssembly()
+  try {
+    assembly.group.updateMatrixWorld(true)
+    const ray = new THREE.Raycaster(new THREE.Vector3(-80, 39, -32), new THREE.Vector3(1, 0, 0), 0, 79)
+    assert.equal(ray.intersectObjects(assembly.partObjects('roof'), true).length, 0)
+  } finally {
+    assembly.dispose()
+  }
+})
+
 test('the air-cleaner seal lies flat and the radiator clears the closed hood', () => {
   const assembly = createCarAssembly()
   try {

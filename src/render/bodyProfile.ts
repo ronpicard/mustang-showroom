@@ -72,6 +72,32 @@ function mixPt(a: readonly [number, number], b: readonly [number, number], t: nu
   return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
 }
 
+/** Shape-preserving cubic: continuous tangents without overshooting a panel's anchors. */
+function curvedSample(points: readonly (readonly [number, number])[], x: number): number {
+  if (x <= points[0][0]) return points[0][1]
+  if (x >= points[points.length - 1][0]) return points[points.length - 1][1]
+  const slope = (i: number) => (points[i + 1][1] - points[i][1]) / (points[i + 1][0] - points[i][0])
+  const tangent = (i: number) => {
+    if (i === 0) return slope(0)
+    if (i === points.length - 1) return slope(i - 1)
+    const a = slope(i - 1)
+    const b = slope(i)
+    if (a * b <= 0) return 0
+    const left = points[i][0] - points[i - 1][0]
+    const right = points[i + 1][0] - points[i][0]
+    return 3 * (left + right) / ((2 * right + left) / a + (right + 2 * left) / b)
+  }
+  const i = points.findIndex((p, j) => j < points.length - 1 && x >= p[0] && x <= points[j + 1][0])
+  const [x0, y0] = points[i]
+  const [x1, y1] = points[i + 1]
+  const h = x1 - x0
+  const t = (x - x0) / h
+  const t2 = t * t
+  const t3 = t2 * t
+  return (2 * t3 - 3 * t2 + 1) * y0 + (t3 - 2 * t2 + t) * h * tangent(i)
+    + (-2 * t3 + 3 * t2) * y1 + (t3 - t2) * h * tangent(i + 1)
+}
+
 /** Fraction of the way from z = zA to z = zB (both descending) that `z` sits at, clamped to [0, 1]. */
 function zT(z: number, zA: number, zB: number): number {
   const t = (zA - z) / (zA - zB)
@@ -99,8 +125,8 @@ const NOSE: Station = {
   z: NOSE_Z,
   center: [0, HOOD_FRONT_Y],
   crease: [HOOD_HALF_WIDTH_FRONT, FENDER_CREASE_FRONT_Y],
-  belt: [NOSE_HALF_WIDTH, NOSE_TOP_Y],
-  bulge: [NOSE_HALF_WIDTH, 24],
+  belt: [NOSE_HALF_WIDTH + 1.2, NOSE_TOP_Y],
+  bulge: [NOSE_HALF_WIDTH + 1.2, 24],
   rockerTop: [NOSE_HALF_WIDTH - 1, 14],
   rockerBottom: [NOSE_HALF_WIDTH - 2, ROCKER_BOTTOM_Y + 1],
 }
@@ -240,7 +266,7 @@ export const STATIONS: readonly Station[] = [
   quarterStation(TAIL_Z),
 ]
 
-/** Linear interpolation between the two stations bracketing `z`; clamps past the ends. */
+/** Smooth longitudinal contours, preserving hood heights and shared panel attachment seams. */
 export function stationAt(z: number): Station {
   const stations = STATIONS
   if (z >= stations[0].z) return stations[0]
@@ -249,30 +275,30 @@ export function stationAt(z: number): Station {
   for (let i = 0; i < stations.length - 1; i++) {
     const a = stations[i]
     const b = stations[i + 1]
-    if (z <= a.z && z >= b.z) return mixStation(a, b, zT(z, a.z, b.z), z)
+    if (z <= a.z && z >= b.z) {
+      const result = mixStation(a, b, zT(z, a.z, b.z), z)
+      for (const key of ['rockerBottom', 'rockerTop', 'bulge', 'belt', 'crease', 'center'] as const) {
+        result[key] = [0, 1].map((axis) => curvedSample(stations.map((s) => [-s.z, s[key][axis]] as const), -z)) as [number, number]
+      }
+      // The broad upper shoulders tuck into the doors while the lower skin stays full.
+      const haunch = Math.exp(-(((z - 54) / 25) ** 2)) + Math.exp(-(((z + 54) / 22) ** 2))
+      result.belt = [result.belt[0] - 0.65 * haunch, result.belt[1]]
+      return result
+    }
   }
   return last
 }
 
 /**
  * The outward half-width at an arbitrary height `y` for one station, found by walking the named
- * points (bottom to top) in y order and interpolating linearly between the two that bracket `y`.
+ * points (bottom to top) with a smooth, non-overshooting curve.
  * `includeCrease` adds the fender/quarter shoulder point above the belt; doors omit it.
  */
 export function sectionHalfWidth(station: Station, y: number, includeCrease: boolean): number {
   const points: (readonly [number, number])[] = [station.rockerBottom, station.rockerTop, station.bulge, station.belt]
   if (includeCrease) points.push(station.crease)
-  const byY = [...points].sort((a, b) => a[1] - b[1])
-  if (y <= byY[0][1]) return byY[0][0]
-  for (let i = 0; i < byY.length - 1; i++) {
-    const [y0, x0] = [byY[i][1], byY[i][0]]
-    const [y1, x1] = [byY[i + 1][1], byY[i + 1][0]]
-    if (y >= y0 && y <= y1) {
-      const t = y1 === y0 ? 0 : (y - y0) / (y1 - y0)
-      return x0 + (x1 - x0) * t
-    }
-  }
-  return byY[byY.length - 1][0]
+  const byY = [...points].sort((a, b) => a[1] - b[1]).filter((p, i, sorted) => i === 0 || p[1] > sorted[i - 1][1])
+  return curvedSample(byY.map(([x, height]) => [height, x]), y)
 }
 
 // -------------------------------------------------------------------------------------------
