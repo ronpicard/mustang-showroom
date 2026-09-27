@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import * as THREE from 'three'
-import { FRONT_AXLE_Z, HOOD_PIN_X, HOOD_PIN_Z, HOOD_SCOOP_REAR_Z, REAR_AXLE_Z, TAIL_CORNER_RADIUS, TAIL_HALF_WIDTH, TAIL_PANEL_FACE_Z, TAIL_PANEL_HALF_WIDTH, TAIL_Z, ROCKER_BOTTOM_Y, ROCKER_TOP_Y, TURN_SIGNAL_X, TURN_SIGNAL_Y, WHEEL_ARCH_CENTER_Y, WHEEL_ARCH_RADIUS } from '../car/dimensions.ts'
+import { FRONT_AXLE_Z, HOOD_PIN_X, SIDE_STRIPE_BOTTOM_Y, SIDE_STRIPE_FRONT_Z, SIDE_STRIPE_REAR_Z, SIDE_STRIPE_TOP_Y, HOOD_PIN_Z, HOOD_SCOOP_REAR_Z, REAR_AXLE_Z, TAIL_CORNER_RADIUS, TAIL_HALF_WIDTH, TAIL_PANEL_FACE_Z, TAIL_PANEL_HALF_WIDTH, TAIL_Z, ROCKER_BOTTOM_Y, ROCKER_TOP_Y, TURN_SIGNAL_X, TURN_SIGNAL_Y, WHEEL_ARCH_CENTER_Y, WHEEL_ARCH_RADIUS } from '../car/dimensions.ts'
 import type { PartId } from '../car/types.ts'
 import { createCarAssembly } from './carAssembly.ts'
 import { stationAt } from './bodyProfile.ts'
@@ -233,6 +233,56 @@ test('the tail rounds into a recessed panel whose lights face the viewer', () =>
         const isSolid = (child as THREE.Mesh).geometry.type === 'BoxGeometry'
         if (isSolid && overlapsLens) assert.ok(childBox.min.z > lensZ, 'a solid backing must not hide the lenses')
       }
+    }
+  } finally {
+    assembly.dispose()
+  }
+})
+
+test('a satin-black side stripe runs low along the fender, door and quarter between the wheel openings', () => {
+  const assembly = createCarAssembly()
+  try {
+    assembly.group.updateMatrixWorld(true)
+    const box = new THREE.Box3()
+    let front = -Infinity
+    let rear = Infinity
+    for (const id of ['fenderLeft', 'doorLeft', 'quarterLeft'] as const) {
+      const stripe = assembly.partObjects(id)[0]!.getObjectByName('sideStripe') as THREE.Mesh | undefined
+      assert.ok(stripe, `${id} needs its side stripe`)
+      assert.equal(stripe.material, assembly.materials.satinBlack)
+      assert.equal(stripe.userData.partId, id)
+      box.setFromObject(stripe)
+      assert.ok(box.min.y > SIDE_STRIPE_BOTTOM_Y - 0.01 && box.max.y < SIDE_STRIPE_TOP_Y + 0.01, `${id}: stripe band y ${box.min.y}..${box.max.y}`)
+      const skin = stationAt((box.min.z + box.max.z) / 2)
+      assert.ok(box.max.x < -skin.rockerTop[0] + 0.5, `${id}: the stripe lies on the lower skin, not proud of it (x ${box.max.x})`)
+      front = Math.max(front, box.max.z)
+      rear = Math.min(rear, box.min.z)
+    }
+    assert.ok(Math.abs(front - SIDE_STRIPE_FRONT_Z) < 0.01 && Math.abs(rear - SIDE_STRIPE_REAR_Z) < 0.01, `stripe spans z ${rear}..${front}`)
+  } finally {
+    assembly.dispose()
+  }
+})
+
+test('the rocker sill runs from arch to arch on the body profile, not as a box under the door alone', () => {
+  const assembly = createCarAssembly()
+  try {
+    assembly.group.updateMatrixWorld(true)
+    const rockers: THREE.Mesh[] = []
+    for (const object of assembly.partObjects('floorPan')) {
+      object.traverse((child) => {
+        if (child.name === 'rocker') rockers.push(child as THREE.Mesh)
+      })
+    }
+    assert.equal(rockers.length, 2)
+    const box = new THREE.Box3()
+    for (const rocker of rockers) {
+      box.setFromObject(rocker)
+      assert.ok(box.max.z >= FRONT_AXLE_Z - WHEEL_ARCH_RADIUS - 0.01, `rocker must reach the front arch, ends at z=${box.max.z}`)
+      assert.ok(box.min.z <= REAR_AXLE_Z + WHEEL_ARCH_RADIUS + 0.01, `rocker must reach the rear arch, starts at z=${box.min.z}`)
+      assert.ok(box.min.y >= ROCKER_BOTTOM_Y - 0.01 && box.max.y <= ROCKER_TOP_Y + 0.5, `rocker band y ${box.min.y}..${box.max.y}`)
+      const outer = Math.max(Math.abs(box.min.x), Math.abs(box.max.x))
+      assert.ok(Math.abs(outer - stationAt(0).rockerTop[0]) < 0.05, `rocker face flush with the sill line, got ${outer}`)
     }
   } finally {
     assembly.dispose()

@@ -34,7 +34,7 @@ import {
 } from '../car/dimensions.ts'
 import type { EngineApi, EngineEvents, EngineSnapshot, ViewInsets } from './engineApi.ts'
 import { createCarAssembly } from './carAssembly.ts'
-import { createShowroom } from './showroom.ts'
+import { createShowroom, orbitDistanceInsideWalls } from './showroom.ts'
 import { CATCH_FLARE_SECONDS, STARTER_CRANK_SECONDS } from '../engineSound.ts'
 
 // -------------------------------------------------------------------------------------------
@@ -313,6 +313,7 @@ export function createEngine(canvas: HTMLCanvasElement, events: EngineEvents): E
   // --- Camera and controls ---------------------------------------------------------------------
 
   const camera = new THREE.PerspectiveCamera(CAMERA_FOV_DEGREES, 1, CAMERA_NEAR, CAMERA_FAR)
+  const orbitDirectionScratch = new THREE.Vector3()
   const controls = new OrbitControls(camera, canvas)
   controls.enableDamping = true
   controls.dampingFactor = CONTROLS_DAMPING_FACTOR
@@ -955,7 +956,13 @@ export function createEngine(canvas: HTMLCanvasElement, events: EngineEvents): E
     showroom.update(dt, elapsedTime)
 
     if (tween) updateTween(dt)
-    else controls.update()
+    else {
+      // Zooming out is capped by the nearest wall in the camera's current direction, not by a
+      // fixed radius, so the camera cannot back out through the wall behind the tail.
+      orbitDirectionScratch.subVectors(camera.position, controls.target).normalize()
+      controls.maxDistance = Math.min(CONTROLS_MAX_DISTANCE, orbitDistanceInsideWalls(controls.target, orbitDirectionScratch))
+      controls.update()
+    }
 
     if (!paused) watchFrameRate(frameSeconds)
 

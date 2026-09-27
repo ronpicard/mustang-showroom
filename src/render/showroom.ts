@@ -86,6 +86,25 @@ const ROOM_SIZE = 720
 const ROOM_HALF = ROOM_SIZE / 2
 const WALL_HEIGHT = 180
 const CEILING_Y = WALL_HEIGHT
+/** The orbit camera stays at least this far inside the walls: their backs are culled, so a camera
+ * that drifts outside the room sees nothing but the background. */
+const EYE_WALL_MARGIN = 12
+
+/**
+ * How far the camera may sit from `target` along the unit `direction` before it leaves the room
+ * through a wall. Only the walls limit it: the ceiling is open from above (the Top preset looks
+ * down through it) and the controls' polar clamp keeps the camera off the floor.
+ */
+export function orbitDistanceInsideWalls(target: THREE.Vector3, direction: THREE.Vector3): number {
+  const limit = ROOM_HALF - EYE_WALL_MARGIN
+  let distance = Infinity
+  for (const [position, heading] of [[target.x, direction.x], [target.z, direction.z]]) {
+    if (Math.abs(heading) < 1e-6) continue
+    const wall = heading > 0 ? limit : -limit
+    distance = Math.min(distance, Math.max(0, (wall - position) / heading))
+  }
+  return distance
+}
 
 const FLOOR_TEXTURE_SIZE = 1024
 /** One epoxy tile seam, inches. */

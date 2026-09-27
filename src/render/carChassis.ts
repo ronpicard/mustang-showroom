@@ -2,13 +2,13 @@ import * as THREE from 'three'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import type { CarMaterials } from './carMaterials.ts'
 import { tagPart, type PartBuild } from './partBuild.ts'
+import { loft } from './bodyProfile.ts'
+import { buildProfileRows } from './carBody.ts'
 import type { PartId } from '../car/types.ts'
 import {
   AXLE_TUBE_DIAMETER,
   COWL_Y,
   DIFFERENTIAL_DIAMETER,
-  DOOR_FRONT_Z,
-  DOOR_REAR_Z,
   DRIVESHAFT_DIAMETER,
   DRIVESHAFT_Y,
   EXHAUST_PIPE_X,
@@ -34,9 +34,7 @@ import {
   RADIATOR_Z,
   REAR_AXLE_Z,
   REAR_SEAT_Z,
-  ROCKER_BOTTOM_Y,
   ROCKER_HALF_WIDTH,
-  ROCKER_TOP_Y,
   SHOCK_TOWER_TOP_Y,
   SHOCK_TOWER_X,
   SHOCK_TOWER_Z,
@@ -45,6 +43,7 @@ import {
   TAIL_Z,
   TRANSMISSION_REAR_Z,
   TRUNK_FRONT_Z,
+  WHEEL_ARCH_RADIUS,
   WHEEL_CENTER_X_FRONT,
   WHEEL_CENTER_X_REAR,
   WHEEL_CENTER_Y,
@@ -76,8 +75,11 @@ const FIREWALL_HALF_WIDTH = 30
 const FIREWALL_THICKNESS = 1
 /** The firewall stops one inch below the cowl so the cowl panel (carBody) laps over it. */
 const FIREWALL_TOP_MARGIN = 1
-/** Rocker panel box: depth (outward from the sill) and a hair of clearance above the ground. */
-const ROCKER_DEPTH = 3
+/** The rocker (sill) panel runs between the wheel openings, ending flush with each arch. */
+const ROCKER_FRONT_Z = FRONT_AXLE_Z - WHEEL_ARCH_RADIUS
+const ROCKER_REAR_Z = REAR_AXLE_Z + WHEEL_ARCH_RADIUS
+const ROCKER_ZSEG = 32
+const ROCKER_YSEG = 3
 /** Front and rear frame rail cross-section (width x height), inches. */
 const FRAME_RAIL_WIDTH = 3
 const FRAME_RAIL_HEIGHT = 4
@@ -369,13 +371,11 @@ function buildFloorPan(materials: CarMaterials): THREE.Group {
   firewall.position.set(0, FLOOR_Y + firewallHeight / 2, FIREWALL_Z)
   group.add(firewall)
 
-  const rockerHeight = ROCKER_TOP_Y - ROCKER_BOTTOM_Y
-  const rockerLength = DOOR_FRONT_Z - DOOR_REAR_Z
-  const rockerCenterY = (ROCKER_TOP_Y + ROCKER_BOTTOM_Y) / 2
-  const rockerCenterZ = (DOOR_FRONT_Z + DOOR_REAR_Z) / 2
-  for (const side of [-1, 1]) {
-    const rocker = boxMesh(ROCKER_DEPTH, rockerHeight, rockerLength, materials.paint, 0.3)
-    rocker.position.set(side * ROCKER_HALF_WIDTH, rockerCenterY, rockerCenterZ)
+  // The rockers follow the body profile's sill line, so they read as one skin with the panels above.
+  for (const side of [-1, 1] as const) {
+    const rows = buildProfileRows(ROCKER_FRONT_Z, ROCKER_REAR_Z, ROCKER_ZSEG, ROCKER_YSEG, side, (s) => s.rockerBottom[1], (s) => s.rockerTop[1], false)
+    const rocker = finishMesh(new THREE.Mesh(loft(rows, side === 1), materials.paint))
+    rocker.name = 'rocker'
     group.add(rocker)
   }
 

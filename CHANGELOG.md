@@ -10,6 +10,7 @@ All notable changes to Mustang Showroom are documented in this file, following t
 
 ### Changed
 
+- The side profile follows the SportsRoof: the roof stays level over the whole door glass and the fastback falls from the B-pillar, so the quarter windows are small sloped-top panes under a wide sail panel. A satin-black Mach 1 side stripe runs low along the fenders, doors and quarters between the wheel openings, and the rocker sill now runs from arch to arch on the body's own curve instead of a box under the doors alone.
 - The tail now follows the 1969 car: the quarter panels round into a recessed tail panel with a rolled lip, two three-lens taillight clusters sit on that face with a chrome bezel around each lens and cluster, the pop-open fuel cap sits between them, and the licence plate and round backup lights hang in the valance under the chrome bumper.
 - The car's reflections now come from a photographer's studio dome, bright overhead and fading to a soft horizon band, so the paint carries a highlight line along the fender tops and a gradient down the doors instead of mirroring a black room. The default charcoal is a lighter gunmetal and metallic paints reflect more, so the body reads in the same tones as the real film car.
 - Low-profile tyres on 17-inch polished five-spoke wheels in the Torq Thrust style replace the tall F60-15s and Magnum 500s, with a deep machined lip and gunmetal spokes, and the raised white sidewall letters are gone.
@@ -24,6 +25,7 @@ All notable changes to Mustang Showroom are documented in this file, following t
 
 ### Fixed
 
+- Zooming all the way out no longer turns the view black when orbiting toward the tail: the camera now stops short of the showroom walls in whichever direction it is backing up, instead of passing through the wall behind the car.
 - The taillight lenses rendered as black squares because the cluster's backing plate sat in front of them; the backing is now a chrome reflector behind the lenses, so they read red even unlit. The rear frame rails also stopped poking through the valance beside the exhaust tips.
 - From the Top view, the ceiling softbox's frame drew a solid black bar straight across the hood and cabin. The frame is now a flat outline that only shows its underside, like the light panel it surrounds.
 - The hood scoop was a flat, knife-edged plate that seemed to float over the stripes. It now rises from the hood as a rounded dome that blends into the skin at the rear, with a full mouth at the front, and it and the hood pins sit on the crowned hood surface instead of the centreline height.

@@ -34,6 +34,10 @@ import {
   ROOF_FRONT_Z,
   ROOF_HALF_WIDTH,
   ROOF_REAR_Z,
+  SIDE_STRIPE_BOTTOM_Y,
+  SIDE_STRIPE_FRONT_Z,
+  SIDE_STRIPE_REAR_Z,
+  SIDE_STRIPE_TOP_Y,
   TAIL_BOTTOM_Y,
   TAIL_PANEL_HALF_WIDTH,
   TAIL_PANEL_RECESS,
@@ -229,7 +233,7 @@ function flatRect(x: number, zFrom: number, zTo: number, yFrom: number, yTo: num
  * sampled from `yLow(station)` to `yHigh(station)` at each z. `sectionHalfWidth` gives the
  * outward half-width, signed by `side`.
  */
-function buildProfileRows(
+export function buildProfileRows(
   zFrom: number,
   zTo: number,
   zSeg: number,
@@ -277,6 +281,17 @@ function topRows(zFrom: number, zTo: number, zSeg: number, xSeg: number, insetX:
 }
 
 /** Low-gloss rally bands follow the actual panel skin, including its crown and hinge motion. */
+/** The Mach 1 lower side stripe: a satin-black band lying on the panel's skin just above the rocker,
+ * clipped to `zFrom..zTo` (the stripe ends short of each wheel opening) and to the arch when given. */
+function sideStripe(zFrom: number, zTo: number, side: Side, materials: CarMaterials, arch?: { z: number; y: number; r: number }): THREE.Mesh {
+  const rows = buildProfileRows(zFrom, zTo, 24, 3, side, () => SIDE_STRIPE_BOTTOM_Y, () => SIDE_STRIPE_TOP_Y, false)
+    .map((row) => row.map((p) => new THREE.Vector3(p.x + side * 0.06, p.y, p.z)))
+  const stripe = mesh(gridGeometry(rows, side === 1, arch ? (p) => insideCircleZY(p, arch) : undefined), materials.satinBlack)
+  stripe.name = 'sideStripe'
+  stripe.castShadow = false
+  return stripe
+}
+
 function rallyStripes(rows: readonly (readonly THREE.Vector3[])[], materials: CarMaterials): THREE.Group {
   const group = new THREE.Group()
   group.name = 'rallyStripes'
@@ -609,6 +624,7 @@ function buildFenderSide(materials: CarMaterials, side: Side, id: PartId): PartB
 
   const g = new THREE.Group()
   g.add(mesh(paintGeom, materials.paint), mesh(wheelhouseGeom, materials.underbody), headlightBucket(materials, side))
+  g.add(sideStripe(SIDE_STRIPE_FRONT_Z, zTo, side, materials))
   g.name = id
   tagPart(g, id)
   return { id, objects: [g] }
@@ -643,7 +659,7 @@ function buildDoorSide(materials: CarMaterials, side: Side, id: PartId): PartBui
   const vinylGeom = mergeGeometries([innerGeom, armrest, knob])
 
   const g = new THREE.Group()
-  g.add(mesh(paintGeom, materials.paint), mesh(vinylGeom, materials.vinyl))
+  g.add(mesh(paintGeom, materials.paint), mesh(vinylGeom, materials.vinyl), sideStripe(zFrom, zTo, side, materials))
   g.name = id
   tagPart(g, id)
   return { id, objects: [g] }
@@ -670,7 +686,7 @@ function buildQuarterSide(materials: CarMaterials, side: Side, id: PartId): Part
   const paintGeom = mergeGeometries([sideGeom, deckGeom, frontFlange, lipGeom])
 
   const g = new THREE.Group()
-  g.add(mesh(paintGeom, materials.paint), mesh(wheelhouseGeom, materials.underbody))
+  g.add(mesh(paintGeom, materials.paint), mesh(wheelhouseGeom, materials.underbody), sideStripe(zFrom, SIDE_STRIPE_REAR_Z, side, materials))
   g.name = id
   tagPart(g, id)
   return { id, objects: [g] }

@@ -71,8 +71,9 @@ export const DOOR_FRONT_Z = 17
 export const DOOR_REAR_Z = -24
 /** The roof panel proper, from the windshield head to where the fastback begins to fall. */
 export const ROOF_FRONT_Z = WINDSHIELD_TOP_Z
-export const ROOF_PEAK_Z = -6
-export const ROOF_REAR_Z = -12
+export const ROOF_PEAK_Z = -9
+/** The SportsRoof stays level over the whole door glass; the fastback falls from the B-pillar. */
+export const ROOF_REAR_Z = DOOR_REAR_Z
 /** The fastback rear glass runs from the roof down to the deck. */
 export const REAR_GLASS_TOP_Z = ROOF_REAR_Z
 export const REAR_GLASS_BASE_Z = -62
@@ -221,7 +222,13 @@ export const DOOR_HANDLE_Z = -14
 /** Quarter windows: the small panes behind the door glass on the fastback. */
 export const QUARTER_GLASS_FRONT_Z = DOOR_REAR_Z - 1
 export const QUARTER_GLASS_REAR_Z = -40
-export const QUARTER_GLASS_TOP_Y = 44
+/** The pane's top edge runs just under the sloping roof edge, so it is only a cap for the front corner. */
+export const QUARTER_GLASS_TOP_Y = 48
+/** Mach 1 reflective side stripe: a low band above the rocker, between the wheel openings. */
+export const SIDE_STRIPE_BOTTOM_Y = ROCKER_TOP_Y + 1
+export const SIDE_STRIPE_TOP_Y = ROCKER_TOP_Y + 4
+export const SIDE_STRIPE_FRONT_Z = FRONT_AXLE_Z - WHEEL_ARCH_RADIUS - 1.5
+export const SIDE_STRIPE_REAR_Z = REAR_AXLE_Z + WHEEL_ARCH_RADIUS + 1.5
 
 // -------------------------------------------------------------------------------------------
 // Engine bay and driveline
