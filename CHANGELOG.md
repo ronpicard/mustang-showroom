@@ -4,10 +4,6 @@ All notable changes to Mustang Showroom are documented in this file, following t
 
 ## [Unreleased]
 
-### Fixed
-
-- The first engine start after the page loads no longer plays the synthesised fallback V8: when the engine is started on the very click or key press that unlocks audio, the start now waits the few milliseconds for the recordings to decode, so the crank-and-catch recording plays from the first start rather than only after the engine is switched off and on again.
-
 ### Added
 
 - Selecting a part now turns the rest of the car into faint matte glass, with its chrome and clearcoat sparkle turned down, so the chosen part stands out wherever it sits, even deep in the engine bay or under the floor. Hovering another part shows it solid again, and deselecting restores the car.
@@ -35,6 +31,7 @@ All notable changes to Mustang Showroom are documented in this file, following t
 
 ### Fixed
 
+- The first engine start after the page loads no longer plays the synthesised fallback V8: when the engine is started on the very click or key press that unlocks audio, the start now waits the few milliseconds for the recordings to decode, so the crank-and-catch recording plays from the first start rather than only after the engine is switched off and on again.
 - Zooming all the way out no longer turns the view black when orbiting toward the tail: the camera now stops short of the showroom walls in whichever direction it is backing up, instead of passing through the wall behind the car.
 - The taillight lenses rendered as black squares because the cluster's backing plate sat in front of them; the backing is now a chrome reflector behind the lenses, so they read red even unlit. The rear frame rails also stopped poking through the valance beside the exhaust tips.
 - From the Top view, the ceiling softbox's frame drew a solid black bar straight across the hood and cabin. The frame is now a flat outline that only shows its underside, like the light panel it surrounds.
